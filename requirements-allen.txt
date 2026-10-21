@@ -1,0 +1,3 @@
+# Optional OFFLINE preparation environment. Do not combine with requirements.txt.
+# AllenSDK controls its own NumPy/SciPy dependency constraints.
+allensdk>=2.16,<3

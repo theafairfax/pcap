@@ -1,0 +1,8 @@
+streamlit>=1.49,<2
+plotly>=5.24,<7
+numpy>=1.24,<3
+pandas>=2.0,<3
+scipy>=1.10,<2
+neo>=0.13,<0.15
+quantities>=0.15,<1
+pyabf>=2.3.8,<3
