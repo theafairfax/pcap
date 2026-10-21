@@ -62,6 +62,9 @@ the full sweep; set a manual window to exclude test pulses and rebound spikes.
 
 ## Display behavior
 
+- AP spike view includes the full captured post-spike tail, including AHP and
+  recovery. The capture still stops at the next AP onset, injection-window end,
+  or configured AHP search limit. The dedicated AHP view stays focused on AHP.
 - Query: black waveform, solid colored marker lines.
 - Reference: gray waveform, faint dashed colored marker lines.
 - Plotly hover provides detailed values; scrolling the reference selector or
@@ -225,3 +228,9 @@ Supabase browsing loads metadata first and downloads only the selected waveform;
 no AllenSDK dependency is added to the deployed app. The included SQL publishes
 reference data for public reading and reserves writes for the local owner-run
 importer. Your own uploaded experimental traces are not sent to Supabase.
+
+Existing Supabase waveform files already contain the captured AP/AHP tail and
+can be used without re-preparing or re-uploading references. Older catalog plot
+bounds may describe the earlier cropped AP view; the browser expands them to
+include both displayed traces. Re-uploading a collection recomputes its cohort
+bounds for the full AP view and restores fixed full-tail bounds across browsing.

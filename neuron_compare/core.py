@@ -96,9 +96,8 @@ def coordinates(event, block, mode, normalize):
     origin = alignment(event, block, mode)
     peak = r['SPIKE Location (ms)']
     if block == 'SPIKE':
-        end = r.get('AHP Onset (ms)', np.nan)
-        end = min(end, peak+5.) if np.isfinite(end) else peak+5.
-        mask = (t >= peak-5.) & (t <= end)
+        # Keep the complete captured tail, including AHP and recovery.
+        mask = t >= peak-5.
     else:
         onset = r.get('AHP Onset (ms)', np.nan)
         mask = t >= (onset if np.isfinite(onset) else peak+.5)
