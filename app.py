@@ -8,6 +8,7 @@ from neuron_compare.recordings import load_recording
 from neuron_compare.core import Settings, count_spikes, first_event, metrics, MARKERS
 from neuron_compare.references import load_collection
 from neuron_compare.plotting import overlay
+from neuron_compare.supabase_library import catalog, fetch_event, validate_browser_key
 
 ROOT=Path(__file__).resolve().parent
 st.set_page_config(page_title='Patch Clamp Analysis Platform',page_icon='〰️',layout='wide')
@@ -28,6 +29,16 @@ def analyze(sweep,settings):
 @st.cache_data(max_entries=4,show_spinner=False)
 def read_references(path,mtime):
     return load_collection(path)
+
+
+@st.cache_data(max_entries=2,ttl=60,show_spinner='Reading reference catalog…')
+def read_cloud_catalog(url,key):
+    return catalog(url,key)
+
+
+@st.cache_data(max_entries=32,ttl=3600,show_spinner='Loading selected reference…')
+def read_cloud_event(url,key,row):
+    return fetch_event(url,key,row)
 
 
 def step_reference(delta,total):
@@ -54,17 +65,32 @@ with st.sidebar:
                       start_ms=start if custom else None,end_ms=end if custom else None)
 
 paths=sorted((ROOT/'references').glob('*.json'))
-if not paths:
-    st.error('No reference collections found. Run python scripts/make_demo.py or prepare an Allen collection.'); st.stop()
+try:
+    cloud_config=dict(st.secrets.get('supabase',{}))
+except FileNotFoundError:
+    cloud_config={}
+cloud_url=cloud_config.get('url','')
+cloud_key=cloud_config.get('publishable_key','')
+options=paths+(['Supabase library'] if cloud_url and cloud_key else [])
+if not options:
+    st.error('Add a local reference collection or configure Supabase in Streamlit secrets.'); st.stop()
 try:
     with st.sidebar:
         st.header('Reference collection')
-        path=st.selectbox('Collection',paths,format_func=lambda p:p.stem)
-    references=read_references(str(path),path.stat().st_mtime_ns)
+        path=st.selectbox('Collection',options,format_func=lambda p:p.stem if isinstance(p,Path) else p)
+    remote=path=='Supabase library'
+    if remote:
+        validate_browser_key(cloud_key)
+        if st.sidebar.button('Refresh cloud library'):
+            read_cloud_catalog.clear()
+            read_cloud_event.clear()
+        references=read_cloud_catalog(cloud_url,cloud_key)
+    else:
+        references=read_references(str(path),path.stat().st_mtime_ns)
 except Exception as err:
     st.error(f'Could not read reference collection: {err}'); st.stop()
 if not references:
-    st.info('This reference collection is empty. Prepare at least one qualifying cell.'); st.stop()
+    st.info('This reference collection is empty. Prepare and upload qualifying cells, then refresh.'); st.stop()
 
 query=None
 if upload is not None:
@@ -114,7 +140,15 @@ with right:
     a.button('← Previous',on_click=step_reference,args=(-1,len(pool)),width='stretch')
     b.button('Next →',on_click=step_reference,args=(1,len(pool)),width='stretch')
     idx=st.selectbox('Reference neuron',range(len(pool)),format_func=lambda i:pool[i]['metadata']['label'],key='reference_index')
-    ref=pool[idx]; meta=ref['metadata']
+    selected_reference=pool[idx]
+    if remote:
+        try:
+            ref=read_cloud_event(cloud_url,cloud_key,selected_reference)
+        except Exception as err:
+            st.error(f'Could not load selected reference: {err}'); st.stop()
+    else:
+        ref=selected_reference
+    meta=ref['metadata']
     st.caption(f'{idx+1} of {len(pool)}')
     if meta.get('synthetic'):
         st.warning('Synthetic example — not an Allen neuron.')
@@ -132,7 +166,10 @@ with left:
     align_choice=st.radio('Align traces at',['Peak / trough','Onset'],horizontal=True,
                           help='Both traces place their own AP peak (or AHP trough) or event onset at 0 ms.')
     alignment='Event location' if align_choice=='Peak / trough' else 'Event onset'
-    st.plotly_chart(overlay(query,ref,pool,block,alignment,normalize,highlight),width='stretch',key='overlay')
+    bounds_key=f'{block}|{alignment}|{normalize}'
+    cloud_bounds=[r['plot_bounds'][bounds_key] for r in pool if bounds_key in r.get('plot_bounds',{})] if remote else None
+    st.plotly_chart(overlay(query,ref,[] if remote else pool,block,alignment,normalize,highlight,
+                           range_bounds=cloud_bounds),width='stretch',key='overlay')
     st.caption('Black: your neuron · Gray: reference · Solid markers: yours · Dashed markers: reference. The selected alignment is centered at 0 ms; axes stay fixed within this filtered collection.')
     for event,label in [(query,'Your neuron'),(ref,'Reference')]:
         if block=='AHP' and not np.isfinite(event['measurements']['AHP Location (ms)']):

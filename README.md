@@ -215,3 +215,13 @@ adapters and comparison UI are newly written for this starter. No distribution
 license is selected for your new repository; decide one before wider release
 and preserve any applicable upstream notices. Version this measurement core
 when making scientific-definition changes and regenerate reference collections.
+
+## Supabase reference library (optional)
+
+Follow [the step-by-step Supabase setup](supabase/SETUP.md) to create the catalog,
+prepare a varied Allen pilot, upload compact snippets, and add your read-only
+connection in Streamlit secrets. The local JSON browser remains available.
+Supabase browsing loads metadata first and downloads only the selected waveform;
+no AllenSDK dependency is added to the deployed app. The included SQL publishes
+reference data for public reading and reserves writes for the local owner-run
+importer. Your own uploaded experimental traces are not sent to Supabase.

@@ -1,36 +1,14 @@
 """Black query, gray reference, and matching colored measurement intersections."""
 import numpy as np
 import plotly.graph_objects as go
-from .core import MARKERS, alignment
+from .core import MARKERS, coordinates
 
 COLORS = ('#e05252', '#9063cf', '#039eb7', '#13a475', '#d88e20', '#d359a0')
 
 
-def coordinates(event, block, mode, normalize):
-    r = event['measurements']
-    t, v = np.asarray(event['time_ms']), np.asarray(event['voltage_mv'])
-    origin = alignment(event, block, mode)
-    peak = r['SPIKE Location (ms)']
-    if block == 'SPIKE':
-        end = r.get('AHP Onset (ms)', np.nan)
-        end = min(end, peak+5.) if np.isfinite(end) else peak+5.
-        mask = (t >= peak-5.) & (t <= end)
-    else:
-        onset = r.get('AHP Onset (ms)', np.nan)
-        mask = t >= (onset if np.isfinite(onset) else peak+.5)
-    base, scale = 0., 1.
-    if normalize:
-        base = r.get('Threshold Vm (mV)', np.nan)
-        amplitude = r.get('AP amplitude (mV)' if block == 'SPIKE' else 'AHP amplitude from threshold (mV)', np.nan)
-        if not np.isfinite(base) or not np.isfinite(amplitude) or abs(amplitude) < 1e-9:
-            raise ValueError(f'{block} normalization requires resolved threshold and amplitude.')
-        scale = abs(amplitude)
-    return t[mask]-origin, (v[mask]-base)/scale, origin, base, scale
-
-
-def overlay(query, reference, cohort, block='SPIKE', mode='Event location', normalize=False, highlight='All markers'):
+def overlay(query, reference, cohort, block='SPIKE', mode='Event location', normalize=False, highlight='All markers', range_bounds=None):
     fig = go.Figure()
-    ranges = []
+    ranges = list(range_bounds or [])
     for event in [query]+list(cohort):
         try:
             x,y,*_ = coordinates(event,block,mode,normalize)
