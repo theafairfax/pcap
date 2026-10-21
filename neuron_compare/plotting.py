@@ -9,7 +9,10 @@ COLORS = ('#e05252', '#9063cf', '#039eb7', '#13a475', '#d88e20', '#d359a0')
 def overlay(query, reference, cohort, block='SPIKE', mode='Event location', normalize=False, highlight='All markers', range_bounds=None):
     fig = go.Figure()
     ranges = list(range_bounds or [])
-    for event in [query]+list(cohort):
+    # Always include displayed traces: older cloud bounds may describe the cropped AP.
+    for event in [query,reference]+list(cohort):
+        if event is None:
+            continue
         try:
             x,y,*_ = coordinates(event,block,mode,normalize)
             if len(x):

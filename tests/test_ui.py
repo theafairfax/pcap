@@ -84,3 +84,22 @@ class UITests(unittest.TestCase):
             self.assertEqual(len(app.exception),0)
             self.assertEqual(next(w for w in app.selectbox if w.label=='Region').value,'All')
             self.assertEqual(next(w for w in app.selectbox if w.label=='Reference neuron').options,[mouse['metadata']['label']])
+
+    def test_legacy_cloud_bounds_do_not_clip_reference_tail(self):
+        query=demo_event(.9,8,'q');ref=demo_event(1.2,25,'r')
+        keep=query['time_ms']<=query['measurements']['SPIKE Location (ms)']+2
+        query['time_ms']=query['time_ms'][keep]
+        query['voltage_mv']=query['voltage_mv'][keep]
+        for mode in ('Event location','Event onset'):
+            for normalize in (False,True):
+                fig=overlay(query,ref,[],mode=mode,normalize=normalize,range_bounds=[[-5,1,-65,30]])
+                lo,hi=fig.layout.xaxis.range
+                ymin,ymax=fig.layout.yaxis.range
+                self.assertAlmostEqual(lo,-hi)
+                for line in [trace for trace in fig.data if trace.mode=='lines']:
+                    self.assertGreaterEqual(hi,max(line.x))
+                    self.assertLessEqual(lo,min(line.x))
+                    self.assertLessEqual(ymin,min(line.y))
+                    self.assertGreaterEqual(ymax,max(line.y))
+                reference=next(trace for trace in fig.data if trace.name=='Reference')
+                self.assertGreater(reference.x[-1],30.)

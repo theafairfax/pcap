@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 import numpy as np
 from scripts.make_demo import demo_event
-from neuron_compare.core import Settings, first_event, metrics, alignment, injection_window, count_spikes
+from neuron_compare.core import Settings, first_event, metrics, alignment, injection_window, count_spikes, coordinates
 from neuron_compare.recordings import Sweep
 from neuron_compare.references import save_collection, load_collection
 
@@ -58,3 +58,18 @@ class CoreTests(unittest.TestCase):
             restored=load_collection(p)[0]
             self.assertTrue(np.isnan(restored['measurements']['AHP Location (ms)']))
             np.testing.assert_allclose(restored['voltage_mv'],e['voltage_mv'])
+
+    def test_ap_view_includes_ahp_and_entire_captured_recovery(self):
+        event=first_event(self.train())
+        r=event['measurements']
+        for mode in ('Event location','Event onset'):
+            for normalize in (False,True):
+                x,y,origin,base,scale=coordinates(event,'SPIKE',mode,normalize)
+                self.assertAlmostEqual(x[-1]+origin,event['time_ms'][-1])
+                self.assertGreater(x[-1]+origin,r['AHP Location (ms)'])
+                trough=np.argmin(y)
+                self.assertAlmostEqual(x[trough]+origin,r['AHP Location (ms)'])
+                self.assertAlmostEqual(y[trough],(r['AHP trough Vm (mV)']-base)/scale)
+        # The dedicated AHP view retains its onset crop.
+        x,y,origin,*_=coordinates(event,'AHP','Event location',False)
+        self.assertGreaterEqual(x[0]+origin,r['AHP Onset (ms)'])
