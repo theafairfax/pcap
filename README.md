@@ -1,4 +1,4 @@
-# Neuron Compare
+# Patch Clamp Analysis Platform
 
 A small Streamlit application for building intuition about individual neuronal
 AP/AHP waveforms. Your neuron stays black; the browsed reference appears in gray,
@@ -69,9 +69,10 @@ the full sweep; set a manual window to exclude test pulses and rebound spikes.
 - Axes are fixed to the uploaded event plus the currently filtered reference
   collection. Changing the collection, region, alignment or analysis may change
   them. Plot zoom is available; the default range is restored on redraw.
-- Default alignment: each event's own location, meaning AP peak or AHP trough.
-  **AP peak** alignment preserves the AP-to-AHP delay. **Event onset** is also
-  available when onset is resolved.
+- Alignment is selected beside the waveform: **Peak / trough** puts each AP
+  peak or AHP trough at zero; **Onset** puts each event onset at zero. Both
+  traces use their own chosen landmark. The X-axis is symmetric around zero
+  so the alignment is always centered. Onset alignment requires resolved onset.
 - Optional normalization sets AP threshold Vm to zero and divides by the event's
   absolute amplitude. Time is never stretched. Raw values remain in the table.
 - Absolute sweep times and times relative to each event's location are shown
@@ -134,6 +135,43 @@ No arbitrary spikes or synthetic stand-ins are substituted for failed cells.
 Failures are printed; if no cells qualify, the output is not overwritten.
 Specimen `464212183` comes from the SDK example; availability and eligibility
 must be checked by running the script. You can provide other mouse specimen IDs.
+
+### Browse by species and region, then prepare one cell
+
+In the app, choose **Collection → Species → Region → Reference neuron**.
+These filters browse records already prepared in the selected JSON collection;
+they do not query the entire Allen catalog. Missing species labels appear as
+Unknown, and changing species resets incompatible region/reference selections.
+
+To discover source specimen IDs without downloading complete recordings, run
+these commands in your Allen environment (Windows PowerShell examples):
+
+```powershell
+.\.venv-allen310\Scripts\python.exe scripts\prepare_allen.py --species mouse --list-cells
+.\.venv-allen310\Scripts\python.exe scripts\prepare_allen.py --species mouse --regions VISp --list-cells
+.\.venv-allen310\Scripts\python.exe scripts\prepare_allen.py --species human --list-cells
+```
+
+Use an ID printed in your chosen species/region catalog to prepare a single
+reference. For example (the example ID still needs to qualify):
+
+```powershell
+.\.venv-allen310\Scripts\python.exe scripts\prepare_allen.py --species mouse --specimen-ids 464212183 --limit 1 --output references\allen_464212183.json
+```
+
+For a human specimen, use `--species human` and its actual specimen ID. Region
+abbreviations must match the catalog (case-insensitive); no eligible recording
+is guaranteed by a metadata listing. `--species all` includes both species.
+`--regions` can also restrict preparation, e.g. `--species mouse --regions VISp
+--limit 5`. The default remains five mouse cells.
+
+Upload the generated JSON file into your repository's `references/` directory,
+restart the app, and select the new collection. A one-cell collection directly
+compares that reference with the uploaded neuron. Each output file replaces its
+previous contents, so use distinct filenames to keep individual selections.
+Full NWB downloads stay local in `.allen-cache/`; only compact reference snippets
+are needed by the app. The user upload field accepts the user's ABF/AXGD/AXGX
+recording, not raw Allen NWB files or arbitrary JSON.
 
 The app discovers every `references/*.json` collection on restart. It browses
 compact prepared snippets and never downloads full NWB files on Previous/Next.

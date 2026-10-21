@@ -14,6 +14,8 @@ class UITests(unittest.TestCase):
     def test_browsing_and_ahp_view(self):
         app=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py'),default_timeout=30).run()
         self.assertEqual(len(app.exception),0)
+        self.assertEqual(app.title[0].value,'Patch Clamp Analysis Platform')
+        next(w for w in app.selectbox if w.label=='Collection').set_value(next(p for p in (Path(__file__).resolve().parents[1]/'references').glob('*.json') if p.stem=='demo')).run()
         original=app.session_state['reference_index']
         next(b for b in app.button if b.label=='Next →').click().run()
         self.assertEqual(len(app.exception),0)
@@ -21,6 +23,9 @@ class UITests(unittest.TestCase):
         next(r for r in app.radio if r.label=='Waveform').set_value('AHP').run()
         self.assertEqual(len(app.exception),0)
         self.assertIn('AP peak to trough (ms)',app.dataframe[0].value['Dynamic'].tolist())
+        next(r for r in app.radio if r.label=='Align traces at').set_value('Onset').run()
+        self.assertEqual(len(app.exception),0)
+        self.assertIn('Species',[w.label for w in app.selectbox])
         next(b for b in app.button if b.label=='← Previous').click().run()
         self.assertEqual(app.session_state['reference_index'],original)
 
@@ -53,3 +58,29 @@ class UITests(unittest.TestCase):
         marker_table=app.dataframe[1].value
         location=marker_table[(marker_table['Neuron']=='Your neuron')&(marker_table['Marker']=='Location')]
         self.assertAlmostEqual(location.iloc[0]['Sweep time (ms)'],200.,places=1)
+
+    def test_both_alignment_markers_land_at_zero_on_centered_axes(self):
+        query=demo_event(.9,10,'q');ref=demo_event(1.4,18,'r')
+        for block in ('SPIKE','AHP'):
+            for mode,marker in [('Event location','Location'),('Event onset','Onset')]:
+                fig=overlay(query,ref,[ref],block,mode)
+                left,right=fig.layout.xaxis.range
+                self.assertAlmostEqual(left,-right)
+                points=[trace for trace in fig.data if trace.name.endswith(' · '+marker)]
+                self.assertEqual(len(points),2)
+                for point in points:
+                    self.assertAlmostEqual(point.x[0],0.)
+
+    def test_species_filter_resets_stale_region_and_reference(self):
+        human=demo_event(1,12,'human');mouse=demo_event(.8,10,'mouse')
+        human['metadata'].update(species='Homo sapiens',region='MTG')
+        mouse['metadata'].update(species='Mus musculus',region='VISp')
+        import streamlit as st
+        st.cache_data.clear()
+        with patch('neuron_compare.references.load_collection',return_value=[human,mouse]):
+            app=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py'),default_timeout=30).run()
+            next(w for w in app.selectbox if w.label=='Region').set_value('MTG').run()
+            next(w for w in app.selectbox if w.label=='Species').set_value('Mus musculus').run()
+            self.assertEqual(len(app.exception),0)
+            self.assertEqual(next(w for w in app.selectbox if w.label=='Region').value,'All')
+            self.assertEqual(next(w for w in app.selectbox if w.label=='Reference neuron').options,[mouse['metadata']['label']])
