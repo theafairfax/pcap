@@ -10,8 +10,8 @@ from neuron_compare.references import load_collection
 from neuron_compare.plotting import overlay
 
 ROOT=Path(__file__).resolve().parent
-st.set_page_config(page_title='Neuron Compare',page_icon='〰️',layout='wide')
-st.title('Neuron Compare')
+st.set_page_config(page_title='Patch Clamp Analysis Platform',page_icon='〰️',layout='wide')
+st.title('Patch Clamp Analysis Platform')
 st.caption('One neuron. One first spike. Explore the differences.')
 
 
@@ -48,7 +48,6 @@ with st.sidebar:
         custom=st.checkbox('Set injection window manually')
         start=st.number_input('Injection start (ms)',min_value=0.,value=100.,disabled=not custom)
         end=st.number_input('Injection end (ms)',min_value=0.,value=600.,disabled=not custom)
-        alignment=st.selectbox('Alignment',['Event location','AP peak','Event onset'])
         normalize=st.checkbox('Normalize amplitude',help='Threshold becomes zero; the event magnitude becomes one. Time is never stretched.')
         highlight=st.selectbox('Highlight dynamic',['All markers']+list(MARKERS))
     settings=Settings(height=height,prominence=prominence,dvdt_threshold=dvdt,ahp_window_ms=ahp_window,
@@ -100,9 +99,14 @@ else:
 left,right=st.columns([3,1],gap='large')
 with right:
     st.subheader('Browse neurons')
-    region=st.selectbox('Region',['All']+sorted({str(r['metadata'].get('region','Unknown')) for r in references}))
-    pool=[r for r in references if region=='All' or str(r['metadata'].get('region','Unknown'))==region]
-    pool_key=(str(path),region)
+    species=st.selectbox('Species',['All']+sorted({str(r['metadata'].get('species') or 'Unknown') for r in references}))
+    species_pool=[r for r in references if species=='All' or str(r['metadata'].get('species') or 'Unknown')==species]
+    regions=['All']+sorted({str(r['metadata'].get('region') or 'Unknown') for r in species_pool})
+    if st.session_state.get('reference_region','All') not in regions:
+        st.session_state['reference_region']='All'
+    region=st.selectbox('Region',regions,key='reference_region')
+    pool=[r for r in species_pool if region=='All' or str(r['metadata'].get('region') or 'Unknown')==region]
+    pool_key=(str(path),species,region)
     if st.session_state.get('pool_key')!=pool_key:
         st.session_state['pool_key']=pool_key; st.session_state['reference_index']=0
     st.session_state['reference_index']=min(st.session_state.get('reference_index',0),len(pool)-1)
@@ -114,6 +118,7 @@ with right:
     st.caption(f'{idx+1} of {len(pool)}')
     if meta.get('synthetic'):
         st.warning('Synthetic example — not an Allen neuron.')
+    st.write(meta.get('species') or 'Unknown species')
     st.write(meta.get('region','Unknown region'))
     st.write(meta.get('cell_type','Unspecified cell label'))
     st.caption(f"Source: {meta.get('source','Unknown')} · Sweep {meta.get('sweep','?')}")
@@ -124,8 +129,11 @@ with right:
 with left:
     view=st.radio('Waveform',['AP spike','AHP'],horizontal=True)
     block='SPIKE' if view=='AP spike' else 'AHP'
+    align_choice=st.radio('Align traces at',['Peak / trough','Onset'],horizontal=True,
+                          help='Both traces place their own AP peak (or AHP trough) or event onset at 0 ms.')
+    alignment='Event location' if align_choice=='Peak / trough' else 'Event onset'
     st.plotly_chart(overlay(query,ref,pool,block,alignment,normalize,highlight),width='stretch',key='overlay')
-    st.caption('Black: your neuron · Gray: reference · Solid markers: yours · Dashed markers: reference. Axes stay fixed within this filtered collection.')
+    st.caption('Black: your neuron · Gray: reference · Solid markers: yours · Dashed markers: reference. The selected alignment is centered at 0 ms; axes stay fixed within this filtered collection.')
     for event,label in [(query,'Your neuron'),(ref,'Reference')]:
         if block=='AHP' and not np.isfinite(event['measurements']['AHP Location (ms)']):
             st.warning(label+' AHP is unresolved: '+event['measurements'].get('Status','No trough found'))

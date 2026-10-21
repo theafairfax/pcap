@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 import numpy as np
 from neuron_compare.core import Settings
-from scripts.prepare_allen import prepare_cell
+from scripts.prepare_allen import prepare_cell, filter_catalog, main
 
 
 class AllenTests(unittest.TestCase):
@@ -22,3 +22,22 @@ class AllenTests(unittest.TestCase):
         self.assertEqual(event['metadata']['injected_current_pa'],100.)
         self.assertAlmostEqual(event['measurements']['SPIKE Location (ms)'],30.)
         self.assertFalse(event['metadata']['synthetic'])
+
+    def test_catalog_filter_and_metadata_only_listing(self):
+        from unittest.mock import patch
+        import io
+        import sys
+        cells=[dict(id=1,species='Homo sapiens',structure_area_abbrev='MTG'),
+               dict(id=2,species='Mus musculus',structure_area_abbrev='VISp')]
+        self.assertEqual(filter_catalog(cells,['mtg']),[cells[0]])
+        cache=unittest.mock.Mock()
+        cache.get_cells.return_value=[cells[0]]
+        factory=unittest.mock.Mock(return_value=cache)
+        module=SimpleNamespace(CellTypesCache=factory)
+        with patch.dict(sys.modules,{'allensdk.core.cell_types_cache':module}), \
+             patch.object(sys,'argv',['prepare_allen.py','--species','human','--regions','MTG','--list-cells']), \
+             patch('sys.stdout',new_callable=io.StringIO) as output:
+            main()
+        cache.get_cells.assert_called_once_with(species=['Homo sapiens'])
+        cache.get_ephys_data.assert_not_called()
+        self.assertIn('Homo sapiens',output.getvalue())

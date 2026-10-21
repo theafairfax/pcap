@@ -64,13 +64,15 @@ def overlay(query, reference, cohort, block='SPIKE', mode='Event location', norm
                                      marker=dict(color=c,size=7,opacity=opacity),showlegend=False,
                                      hovertemplate=name+' · '+marker+'<br>%{x:.4f} ms<extra></extra>'))
     fig.update_layout(template='plotly_white',height=440,margin=dict(l=20,r=20,t=25,b=30),
-                      xaxis_title=f'Time from {mode.lower()} (ms)',
+                      xaxis_title=f"Time from {('AP peak' if block=='SPIKE' else 'AHP trough') if mode=='Event location' else mode.lower()} (ms)",
                       yaxis_title='Amplitude / event magnitude' if normalize else 'Membrane potential (mV)',
                       legend=dict(orientation='h',y=1.1),hovermode='closest')
     if ranges:
         a=np.asarray(ranges)
         xmin,xmax,ymin,ymax=a[:,0].min(),a[:,1].max(),a[:,2].min(),a[:,3].max()
         pad=max((ymax-ymin)*.08,.05 if normalize else 1.)
-        fig.update_xaxes(range=[xmin,xmax])
+        # Equal time on either side keeps the chosen alignment in the center.
+        extent=max(abs(xmin),abs(xmax),.1)*1.04
+        fig.update_xaxes(range=[-extent,extent],zeroline=True,zerolinecolor='#cbd5e1',tick0=0)
         fig.update_yaxes(range=[ymin-pad,ymax+pad])
     return fig

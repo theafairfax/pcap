@@ -61,9 +61,24 @@ def prepare_cell(cache, cell, settings):
     return first_event(sw,settings,metadata=meta)
 
 
+SPECIES = {'mouse': 'Mus musculus', 'human': 'Homo sapiens'}
+
+
+def filter_catalog(cells, regions=None):
+    """Exact, case-insensitive area abbreviations, preserving catalog order."""
+    if not regions:
+        return cells
+    wanted={name.casefold() for name in regions}
+    return [c for c in cells if str(c.get('structure_area_abbrev') or
+            c.get('structure_area_acronym') or 'Unknown region').casefold() in wanted]
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--specimen-ids',type=int,nargs='+')
+    parser.add_argument('--species',choices=['mouse','human','all'],default='mouse')
+    parser.add_argument('--regions',nargs='+',help='Area abbreviations, e.g. VISp; exact matches.')
+    parser.add_argument('--list-cells',action='store_true',help='Print matching cell metadata without downloading NWB recordings.')
     parser.add_argument('--limit',type=int,default=5,help='Maximum cells to prepare (and attempt).')
     parser.add_argument('--output',default='references/allen.json')
     parser.add_argument('--cache',default='.allen-cache/manifest.json')
@@ -75,12 +90,22 @@ def main():
     except ImportError as err:
         raise SystemExit('Install requirements-allen.txt in a separate Python environment first.') from err
     cache=CellTypesCache(manifest_file=args.cache)
-    cells=cache.get_cells(species=['Mus musculus'])
+    cells=cache.get_cells(species=None if args.species=='all' else [SPECIES[args.species]])
+    cells=filter_catalog(cells,args.regions)
+    if args.list_cells:
+        print('Specimen ID\tSpecies\tRegion\tLayer\tTransgenic line')
+        for cell in cells:
+            print('\t'.join(str(value or 'Unknown') for value in (
+                cell['id'],cell.get('species'),
+                cell.get('structure_area_abbrev') or cell.get('structure_area_acronym'),
+                cell.get('structure_layer_name'),cell.get('transgenic_line'))))
+        print(f'{len(cells)} matching cells. Metadata listing does not establish Long Square eligibility.',file=sys.stderr)
+        return
     if args.specimen_ids:
         by_id={int(c['id']):c for c in cells}
         unknown=set(args.specimen_ids)-set(by_id)
         if unknown:
-            raise SystemExit('IDs not present in mouse Cell Types catalog: '+str(sorted(unknown)))
+            raise SystemExit('IDs not present in the selected species/region catalog: '+str(sorted(unknown)))
         cells=[by_id[i] for i in args.specimen_ids]
     events=[]
     for cell in cells[:args.limit]:
