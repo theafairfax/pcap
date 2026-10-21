@@ -88,3 +88,25 @@ def alignment(event, block, mode):
     if not np.isfinite(origin):
         raise ValueError(f'{block} {mode.lower()} alignment is unresolved.')
     return float(origin)
+
+
+def coordinates(event, block, mode, normalize):
+    r = event['measurements']
+    t, v = np.asarray(event['time_ms']), np.asarray(event['voltage_mv'])
+    origin = alignment(event, block, mode)
+    peak = r['SPIKE Location (ms)']
+    if block == 'SPIKE':
+        end = r.get('AHP Onset (ms)', np.nan)
+        end = min(end, peak+5.) if np.isfinite(end) else peak+5.
+        mask = (t >= peak-5.) & (t <= end)
+    else:
+        onset = r.get('AHP Onset (ms)', np.nan)
+        mask = t >= (onset if np.isfinite(onset) else peak+.5)
+    base, scale = 0., 1.
+    if normalize:
+        base = r.get('Threshold Vm (mV)', np.nan)
+        amplitude = r.get('AP amplitude (mV)' if block == 'SPIKE' else 'AHP amplitude from threshold (mV)', np.nan)
+        if not np.isfinite(base) or not np.isfinite(amplitude) or abs(amplitude) < 1e-9:
+            raise ValueError(f'{block} normalization requires resolved threshold and amplitude.')
+        scale = abs(amplitude)
+    return t[mask]-origin, (v[mask]-base)/scale, origin, base, scale

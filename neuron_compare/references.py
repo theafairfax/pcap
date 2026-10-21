@@ -25,7 +25,10 @@ def save_collection(path, events):
 
 
 def load_collection(path):
-    data = json.loads(Path(path).read_text())
+    return parse_collection(json.loads(Path(path).read_text()))
+
+
+def parse_collection(data):
     if data.get('schema_version') != 1:
         raise ValueError('Unsupported reference schema.')
     events = data.get('events', [])
