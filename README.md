@@ -65,7 +65,7 @@ the full sweep; set a manual window to exclude test pulses and rebound spikes.
 
 - AP spike view includes the full captured post-spike tail, including AHP and
   recovery. The capture still stops at the next AP onset, injection-window end,
-  or configured AHP search limit. The dedicated AHP view stays focused on AHP.
+  or configured capture limit. The dedicated AHP view stays focused on AHP.
 - Query: black waveform, solid colored marker lines.
 - Reference: gray waveform, faint dashed colored marker lines.
 - Plotly hover provides detailed values; scrolling the reference selector or
@@ -84,7 +84,7 @@ the full sweep; set a manual window to exclude test pulses and rebound spikes.
 - This initial release supports automatic markers and highlighting. Direct
   dragging/manual editing of landmarks is not included.
 
-## Measurement definitions (analysis version `first-event-1.0`)
+## Measurement definitions (analysis version `first-event-1.1`)
 
 Samples use seconds, mV and pA internally at the reader boundary; the event model
 uses milliseconds and mV. All reference and upload events use the same extractor.
@@ -100,9 +100,16 @@ uses milliseconds and mV. All reference and upload events use the same extractor
   minimum. Depth is signed trough minus AP onset Vm, not trough/absolute AP peak.
 - AHP rise: downward 10–90% interval from onset toward trough; width: duration
   between downward/upward half-depth crossings. It is not exponential decay tau.
-- AHP search stops at next AP onset, injection-window end, or the configured
-  post-peak limit (50 ms). A trough at the boundary is unresolved. Truncated
-  recovery yields missing width. AHP here does not distinguish fAHP/mAHP/sAHP.
+- AHP trough identification stops **3 ms after the AP half-fall** (the interpolated
+  falling 50% crossing between AP onset Vm and peak), or earlier at the next AP
+  onset, injection-window end, or configured capture limit. A trough at the search
+  boundary is unresolved; if AP half-fall is missing, AHP detection is unavailable.
+  Recovery measurements and waveform display retain the longer post-peak capture
+  (default 50 ms). Truncated recovery yields missing width. This early-trough
+  criterion emphasizes fast AHPs and excludes later troughs.
+- Version 1.0 local and Supabase references are remeasured from their stored
+  waveform samples when loaded, using the new criterion; no re-upload is required.
+  New references are saved as version 1.1.
 - No junction-potential correction, temperature correction, or automatic
   cross-laboratory harmonization is applied.
 

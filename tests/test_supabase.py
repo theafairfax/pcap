@@ -51,12 +51,24 @@ class SupabaseTests(unittest.TestCase):
         with patch('neuron_compare.supabase_library.request',side_effect=[json.dumps(rows).encode(),b'[{"id":"last"}]']) as req:
             result=catalog('https://example.supabase.co','public')
         self.assertEqual(len(result),501)
+        from urllib.parse import unquote
+        self.assertIn('analysis_version=in.(first-event-1.1,first-event-1.0)',unquote(req.call_args_list[0].args[2]))
         self.assertIn('offset=500',req.call_args_list[1].args[2])
         event=allen_event(3)
         with patch('neuron_compare.supabase_library.request',return_value=encode_event(event)) as req:
             restored=fetch_event('https://example.supabase.co','public',{'id':'allen-3','storage_path':'v1/3.npz'})
         self.assertEqual(restored['metadata']['id'],'allen-3')
         self.assertEqual(req.call_count,1)
+
+    def test_legacy_cloud_reference_is_remeasured_on_fetch(self):
+        from neuron_compare.core import ANALYSIS_VERSION, LEGACY_ANALYSIS_VERSION
+        event=allen_event(4)
+        event['analysis_version']=LEGACY_ANALYSIS_VERSION
+        event['measurements']['AHP Location (ms)']=35.
+        with patch('neuron_compare.supabase_library.request',return_value=encode_event(event)):
+            restored=fetch_event('https://example.supabase.co','public',{'id':'allen-4','storage_path':'v1/4.npz'})
+        self.assertEqual(restored['analysis_version'],ANALYSIS_VERSION)
+        self.assertAlmostEqual(restored['measurements']['AHP Location (ms)'],22.5)
 
     def test_diverse_order_alternates_species_and_groups(self):
         cells=[dict(id=i,species=species,structure_area_abbrev=region) for i,(species,region) in enumerate([
