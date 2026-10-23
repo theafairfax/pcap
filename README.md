@@ -2,8 +2,9 @@
 
 A small Streamlit application for building intuition about individual neuronal
 AP/AHP waveforms. Your neuron stays black; the browsed reference appears in gray,
-with matching colored measurement intersections. It is a visual comparison tool,
-not a cell-type or ion-channel classifier.
+with matching colored measurement intersections. Bulk uploads export per-file
+kinetics and support descriptive two-group box plots. Waveform similarity does
+not establish cell type or ion-channel identity.
 
 ## Start locally
 
@@ -49,7 +50,7 @@ into the repository. A public deployment still runs on its host's infrastructure
 - To compare two recordings, choose **User Uploaded** under **Reference collection → Collection**, upload a second ABF/AXGD/AXGX rheobase recording, and choose its **Reference sweep**. Your original recording stays black and the uploaded reference appears gray in both AP and AHP views. Each sweep contributes its first detected AP/AHP; both files use **Adjust analysis** settings (including any manual injection window). The reference has its own voltage channel selector and defaults to its first spiking sweep. No Supabase configuration is required, and the reference upload is not published.
 - Explore your values, the reference values, and `reference minus yours`.
 
-No bulk upload, ramp protocol, RMP-monitor workflow, or required metadata form.
+The Kinetics Visualizer has no ramp protocol, RMP-monitor workflow, or required metadata form.
 The app assumes the uploaded file is a rheobase/step protocol; it does not infer
 or certify the protocol type from a filename. A custom selected sweep can be
 suprathreshold; its first AP is still used.
@@ -243,3 +244,40 @@ can be used without re-preparing or re-uploading references. Older catalog plot
 bounds may describe the earlier cropped AP view; the browser expands them to
 include both displayed traces. Re-uploading a collection recomputes its cohort
 bounds for the full AP view and restores fixed full-tail bounds across browsing.
+
+
+## Bulk Kinetics and Compare Groups
+
+The app has three tabs: **Kinetics Visualizer** (the existing waveform comparison),
+**Bulk Kinetics**, and **Compare Groups**. Bulk analysis works independently of
+reference collections and uses its own analysis settings.
+
+1. In **Bulk Kinetics**, upload multiple ABF/AXGD/AXGX rheobase files and click
+   **Process files**. Files are processed sequentially. The first sweep in recording
+   order with a detected AP inside its injection window is selected, then only its
+   first AP/AHP is measured. This assumes the rheobase protocol orders sweeps as
+   intended; it does not sort by injected current.
+2. **Download kinetics CSV** gives one row per file, including filename/unique file
+   ID, selected sweep (reader's zero-based index), AP count in that sweep, detection
+   settings, injection window, status, and AP/AHP metrics and marker times in ms/mV.
+   **AP Half width (ms)** and **AHP Half width (ms)** are half-fall minus half-rise,
+   equivalent to the visualizer's half-height width. The 3 ms after AP half-fall
+   trough cutoff also applies to bulk analysis. AHP recovery/half-width can extend
+   beyond this cutoff within the configured recovery capture.
+3. Failed/no-spike files retain an explanatory row; unresolved numbers are blank.
+   Partial first events are retained rather than replaced by later APs or sweeps.
+   Results cache only scalar rows; parsed recordings are released after each file.
+   Streamlit still holds the uploaded file bytes for the current session.
+4. In **Compare Groups**, select processed files for **Group 1 files** and **Group 2
+   files**, then click **Analyze**. Assignments must be nonempty and disjoint.
+   Duplicate filenames are numbered separately. Unselected files are excluded;
+   files without any detected AP cannot be selected. Each file contributes one
+   observation, even if multiple APs exist in its selected sweep.
+5. Box plots compare every standard AP/AHP measure, including both half widths
+   and AP-peak-to-AHP-trough delay. Missing values are omitted per measure and n is
+   shown separately for each group. The summary reports n, missing count, mean,
+   median, and sample SD; it is a descriptive comparison without significance tests.
+   Both the summary and the assigned per-file kinetics can be downloaded as CSV.
+
+Changing uploads or bulk settings requires reprocessing. Changing group selections
+requires clicking Analyze again before comparison results are shown.
