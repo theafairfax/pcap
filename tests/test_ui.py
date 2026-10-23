@@ -59,6 +59,39 @@ class UITests(unittest.TestCase):
         location=marker_table[(marker_table['Neuron']=='Your neuron')&(marker_table['Marker']=='Location')]
         self.assertAlmostEqual(location.iloc[0]['Sweep time (ms)'],200.,places=1)
 
+    def test_uploaded_reference_sweep_and_collection_switch(self):
+        from neuron_compare.recordings import Sweep
+        import streamlit as st
+        st.cache_data.clear()
+        t=np.arange(20000)/20000.
+        def sweep(index,peak):
+            v=np.interp(t*1000,[0,100,198,199,200,201,204,220,1000],
+                        [-65,-65,-65,-60,peak,-65,-77,-65,-65])
+            return Sweep(index,t,v)
+        sweeps=[Sweep(0,t,np.full_like(t,-65.)),sweep(1,30),sweep(2,45)]
+        primary=io.BytesIO(b'primary');primary.name='primary.abf'
+        reference=io.BytesIO(b'reference');reference.name='reference.axgd'
+        def uploader(label,**kwargs):
+            return reference if label=='Reference rheobase recording' else primary
+        with patch('streamlit.file_uploader',side_effect=uploader), patch('neuron_compare.recordings.load_recording',return_value=sweeps):
+            app=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py'),default_timeout=30).run()
+            next(w for w in app.selectbox if w.label=='Collection').set_value('User Uploaded').run()
+            self.assertEqual(len(app.exception),0)
+            self.assertEqual(next(w for w in app.selectbox if w.label=='Reference sweep').value,1)
+            self.assertFalse(any(w.label=='Species' for w in app.selectbox))
+            next(w for w in app.selectbox if w.label=='Reference sweep').set_value(2).run()
+            self.assertEqual(len(app.exception),0)
+            table=app.dataframe[0].value.set_index('Dynamic')
+            self.assertAlmostEqual(table.loc['Peak Vm (mV)','Reference'],45.)
+            self.assertAlmostEqual(table.loc['Peak Vm (mV)','Your neuron'],30.)
+            next(w for w in app.radio if w.label=='Waveform').set_value('AHP').run()
+            self.assertEqual(len(app.exception),0)
+            self.assertIn('AP peak to trough (ms)',app.dataframe[0].value['Dynamic'].tolist())
+            next(w for w in app.selectbox if w.label=='Collection').set_value(next(p for p in (Path(__file__).resolve().parents[1]/'references').glob('*.json') if p.stem=='demo')).run()
+            self.assertEqual(len(app.exception),0)
+            self.assertTrue(any(w.label=='Species' for w in app.selectbox))
+        st.cache_data.clear()
+
     def test_both_alignment_markers_land_at_zero_on_centered_axes(self):
         query=demo_event(.9,10,'q');ref=demo_event(1.4,18,'r')
         for block in ('SPIKE','AHP'):

@@ -46,6 +46,7 @@ into the repository. A public deployment still runs on its host's infrastructure
 - Only the **first AP during that sweep's injection window** and its following
   AHP enter the comparison, even if there are later APs in the sweep.
 - Choose AP spike or AHP. Browse the reference list with Previous/Next.
+- To compare two recordings, choose **User Uploaded** under **Reference collection → Collection**, upload a second ABF/AXGD/AXGX rheobase recording, and choose its **Reference sweep**. Your original recording stays black and the uploaded reference appears gray in both AP and AHP views. Each sweep contributes its first detected AP/AHP; both files use **Adjust analysis** settings (including any manual injection window). The reference has its own voltage channel selector and defaults to its first spiking sweep. No Supabase configuration is required, and the reference upload is not published.
 - Explore your values, the reference values, and `reference minus yours`.
 
 No bulk upload, ramp protocol, RMP-monitor workflow, or required metadata form.
