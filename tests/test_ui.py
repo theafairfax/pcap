@@ -47,7 +47,7 @@ class UITests(unittest.TestCase):
             p=Path(d)/'upload.abf'
             writeABF1(np.stack([base,spike]),str(p),20000,units='mV')
             upload=io.BytesIO(p.read_bytes());upload.name='upload.abf'
-            with patch('streamlit.file_uploader',return_value=upload):
+            with patch('streamlit.file_uploader',side_effect=lambda label,**kwargs: [] if label=='Bulk rheobase recordings' else upload):
                 app=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py'),default_timeout=30).run()
         self.assertEqual(len(app.exception),0)
         sweep=next(w for w in app.selectbox if w.label=='Sweep')
@@ -70,6 +70,8 @@ class UITests(unittest.TestCase):
         primary=io.BytesIO(b'primary');primary.name='primary.abf'
         reference=io.BytesIO(b'reference');reference.name='reference.axgd'
         def uploader(label,**kwargs):
+            if label=='Bulk rheobase recordings':
+                return []
             return reference if label=='Reference rheobase recording' else primary
         with patch('streamlit.file_uploader',side_effect=uploader), patch('neuron_compare.recordings.load_recording',return_value=sweeps):
             app=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py'),default_timeout=30).run()
