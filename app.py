@@ -192,12 +192,12 @@ with left:
     align_choice=st.radio('Align traces at',['Peak / trough','Onset'],horizontal=True,
                           help='Both traces place their own AP peak (or AHP trough) or event onset at 0 ms.')
     alignment='Event location' if align_choice=='Peak / trough' else 'Event onset'
-    bounds_key=f'{block}|{alignment}|{normalize}'
-    cloud_bounds=[r['plot_bounds'][bounds_key] for r in pool if bounds_key in r.get('plot_bounds',{})] if remote else None
-    st.plotly_chart(overlay(query,ref,[] if remote else pool,block,alignment,normalize,highlight,
-                           range_bounds=cloud_bounds),width='stretch',key='overlay')
-    st.caption('Black: your neuron · Gray: reference · Solid markers: yours · Dashed markers: reference. The selected alignment is centered at 0 ms; axes stay fixed within this filtered collection.')
+    st.plotly_chart(overlay(query,ref,[] if remote else pool,block,alignment,normalize,highlight),
+                    width='stretch',key='overlay')
+    st.caption('Black: your neuron · Gray: reference · Solid markers: yours · Dashed markers: reference. Both views show 2 ms before AP onset through 3 ms after AP half-fall, limited to captured samples. Each trace uses its own landmarks; axes fit the displayed pair.')
     for event,label in [(query,'Your neuron'),(ref,'Reference')]:
+        if not all(np.isfinite(event['measurements'].get(k,np.nan)) for k in ('SPIKE Onset (ms)','SPIKE Half fall (ms)')):
+            st.warning(label+': waveform display requires resolved AP onset and half-fall.')
         if block=='AHP' and not np.isfinite(event['measurements']['AHP Location (ms)']):
             st.warning(label+' AHP is unresolved: '+event['measurements'].get('Status','No trough found'))
         elif block=='AHP' and not np.isfinite(event['measurements']['AHP Width (ms)']):

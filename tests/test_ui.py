@@ -29,11 +29,9 @@ class UITests(unittest.TestCase):
         next(b for b in app.button if b.label=='← Previous').click().run()
         self.assertEqual(app.session_state['reference_index'],original)
 
-    def test_fixed_axes_and_trace_order(self):
+    def test_visible_pair_axes_and_trace_order(self):
         query=demo_event(.9,10,'q');a=demo_event(.6,8,'a');b=demo_event(1.4,18,'b')
         first=overlay(query,a,[a,b]);second=overlay(query,b,[a,b])
-        self.assertEqual(first.layout.xaxis.range,second.layout.xaxis.range)
-        self.assertEqual(first.layout.yaxis.range,second.layout.yaxis.range)
         self.assertEqual(first.data[0].name,'Reference')
         for block in ('SPIKE','AHP'):
             fig=overlay(query,a,[a,b],block,'Event location',True)
@@ -92,13 +90,14 @@ class UITests(unittest.TestCase):
             self.assertTrue(any(w.label=='Species' for w in app.selectbox))
         st.cache_data.clear()
 
-    def test_both_alignment_markers_land_at_zero_on_centered_axes(self):
+    def test_both_alignment_markers_land_at_zero_with_cropped_axes(self):
         query=demo_event(.9,10,'q');ref=demo_event(1.4,18,'r')
         for block in ('SPIKE','AHP'):
             for mode,marker in [('Event location','Location'),('Event onset','Onset')]:
                 fig=overlay(query,ref,[ref],block,mode)
                 left,right=fig.layout.xaxis.range
-                self.assertAlmostEqual(left,-right)
+                self.assertLessEqual(left,0.)
+                self.assertGreaterEqual(right,0.)
                 points=[trace for trace in fig.data if trace.name.endswith(' · '+marker)]
                 self.assertEqual(len(points),2)
                 for point in points:
@@ -118,21 +117,21 @@ class UITests(unittest.TestCase):
             self.assertEqual(next(w for w in app.selectbox if w.label=='Region').value,'All')
             self.assertEqual(next(w for w in app.selectbox if w.label=='Reference neuron').options,[mouse['metadata']['label']])
 
-    def test_legacy_cloud_bounds_do_not_clip_reference_tail(self):
+    def test_legacy_cloud_bounds_do_not_expand_visible_window(self):
         query=demo_event(.9,8,'q');ref=demo_event(1.2,25,'r')
-        keep=query['time_ms']<=query['measurements']['SPIKE Location (ms)']+2
-        query['time_ms']=query['time_ms'][keep]
-        query['voltage_mv']=query['voltage_mv'][keep]
-        for mode in ('Event location','Event onset'):
-            for normalize in (False,True):
-                fig=overlay(query,ref,[],mode=mode,normalize=normalize,range_bounds=[[-5,1,-65,30]])
-                lo,hi=fig.layout.xaxis.range
-                ymin,ymax=fig.layout.yaxis.range
-                self.assertAlmostEqual(lo,-hi)
-                for line in [trace for trace in fig.data if trace.mode=='lines']:
-                    self.assertGreaterEqual(hi,max(line.x))
-                    self.assertLessEqual(lo,min(line.x))
-                    self.assertLessEqual(ymin,min(line.y))
-                    self.assertGreaterEqual(ymax,max(line.y))
-                reference=next(trace for trace in fig.data if trace.name=='Reference')
-                self.assertGreater(reference.x[-1],30.)
+        for block in ('SPIKE','AHP'):
+            for mode in ('Event location','Event onset'):
+                for normalize in (False,True):
+                    fig=overlay(query,ref,[],block,mode,normalize,range_bounds=[[-500,500,-500,500]])
+                    lo,hi=fig.layout.xaxis.range
+                    lines=[trace for trace in fig.data if trace.mode=='lines']
+                    self.assertAlmostEqual(lo,min(min(line.x) for line in lines))
+                    self.assertAlmostEqual(hi,max(max(line.x) for line in lines))
+                    for line,event in zip(lines,(ref,query)):
+                        r=event['measurements']
+                        origin=r[f'{block} Location (ms)' if mode=='Event location' else f'{block} Onset (ms)']
+                        self.assertAlmostEqual(line.x[0]+origin,r['SPIKE Onset (ms)']-2.)
+                        self.assertAlmostEqual(line.x[-1]+origin,r['SPIKE Half fall (ms)']+3.)
+                    for trace in fig.data:
+                        self.assertGreaterEqual(min(trace.x),lo)
+                        self.assertLessEqual(max(trace.x),hi)

@@ -59,20 +59,30 @@ class CoreTests(unittest.TestCase):
             self.assertTrue(np.isnan(restored['measurements']['AHP Location (ms)']))
             np.testing.assert_allclose(restored['voltage_mv'],e['voltage_mv'])
 
-    def test_ap_view_includes_ahp_and_entire_captured_recovery(self):
+    def test_both_views_use_ap_landmark_window(self):
         event=first_event(self.train())
         r=event['measurements']
-        for mode in ('Event location','Event onset'):
-            for normalize in (False,True):
-                x,y,origin,base,scale=coordinates(event,'SPIKE',mode,normalize)
-                self.assertAlmostEqual(x[-1]+origin,event['time_ms'][-1])
-                self.assertGreater(x[-1]+origin,r['AHP Location (ms)'])
-                trough=np.argmin(y)
-                self.assertAlmostEqual(x[trough]+origin,r['AHP Location (ms)'])
-                self.assertAlmostEqual(y[trough],(r['AHP trough Vm (mV)']-base)/scale)
-        # The dedicated AHP view retains its onset crop.
-        x,y,origin,*_=coordinates(event,'AHP','Event location',False)
-        self.assertGreaterEqual(x[0]+origin,r['AHP Onset (ms)'])
+        for block in ('SPIKE','AHP'):
+            for mode in ('Event location','Event onset'):
+                for normalize in (False,True):
+                    x,y,origin,base,scale=coordinates(event,block,mode,normalize)
+                    self.assertAlmostEqual(x[0]+origin,r['SPIKE Onset (ms)']-2.)
+                    self.assertAlmostEqual(x[-1]+origin,r['SPIKE Half fall (ms)']+3.)
+                    self.assertAlmostEqual(y[-1],(np.interp(x[-1]+origin,event['time_ms'],event['voltage_mv'])-base)/scale)
+        # Cropping the display does not discard stored recovery samples.
+        self.assertGreater(event['time_ms'][-1],r['SPIKE Half fall (ms)']+3.)
+
+    def test_display_clips_to_capture_and_requires_landmarks(self):
+        event=first_event(self.train())
+        keep=(event['time_ms']>=18.5)&(event['time_ms']<=22.)
+        event['time_ms']=event['time_ms'][keep]
+        event['voltage_mv']=event['voltage_mv'][keep]
+        x,y,origin,*_=coordinates(event,'SPIKE','Event location',False)
+        self.assertAlmostEqual(x[0]+origin,event['time_ms'][0])
+        self.assertAlmostEqual(x[-1]+origin,event['time_ms'][-1])
+        event['measurements']['SPIKE Half fall (ms)']=np.nan
+        with self.assertRaises(ValueError):
+            coordinates(event,'SPIKE','Event location',False)
 
     def test_ahp_trough_uses_half_fall_cutoff_but_retains_recovery(self):
         t=np.arange(0.,.1,.00002)
@@ -84,7 +94,7 @@ class CoreTests(unittest.TestCase):
         self.assertAlmostEqual(r['AHP Location (ms)'],22.)
         self.assertAlmostEqual(r['AHP trough search end (ms)'],r['SPIKE Half fall (ms)']+3.)
         self.assertLessEqual(r['AHP Location (ms)'],r['SPIKE Half fall (ms)']+3.)
-        # Recovery and the displayed tail can extend past the trough-search cutoff.
+        # Recovery measurements and stored capture can extend past the trough-search cutoff.
         self.assertGreater(r['AHP Half fall (ms)'],r['AHP trough search end (ms)'])
         self.assertGreater(event['time_ms'][-1],35.)
         # With only a late trough, report unresolved instead of selecting it.
