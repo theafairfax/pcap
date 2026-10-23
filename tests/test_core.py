@@ -11,7 +11,7 @@ from neuron_compare.references import save_collection, load_collection
 class CoreTests(unittest.TestCase):
     def train(self):
         t=np.arange(0.,.1,.00002)
-        v=np.interp(t*1000,[0,18,19,20,21,24,40,58,59,60,61,64,80,100],
+        v=np.interp(t*1000,[0,18,19,20,21,22.5,40,58,59,60,61,62.5,80,100],
                     [-65,-65,-60,30,-65,-77,-65,-65,-60,35,-65,-80,-65,-65])
         return Sweep(0,t,v)
 
@@ -31,7 +31,7 @@ class CoreTests(unittest.TestCase):
             self.assertAlmostEqual(r[f'{block} Rise (ms)'],r[f'{block} Rise 90% (ms)']-r[f'{block} Rise 10% (ms)'])
             self.assertEqual(r[f'{block} Location relative (ms)'],0.)
             self.assertGreater(r[f'{block} Width (ms)'],0.)
-        self.assertAlmostEqual(metrics(event,'AHP')['AP peak to trough (ms)'],4.)
+        self.assertAlmostEqual(metrics(event,'AHP')['AP peak to trough (ms)'],2.5)
         self.assertEqual(alignment(event,'AHP','AP peak'),20.)
 
     def test_window_and_no_spike(self):
@@ -73,3 +73,42 @@ class CoreTests(unittest.TestCase):
         # The dedicated AHP view retains its onset crop.
         x,y,origin,*_=coordinates(event,'AHP','Event location',False)
         self.assertGreaterEqual(x[0]+origin,r['AHP Onset (ms)'])
+
+    def test_ahp_trough_uses_half_fall_cutoff_but_retains_recovery(self):
+        t=np.arange(0.,.1,.00002)
+        # A fast AHP at 22 ms followed by a deeper, unrelated dip at 35 ms.
+        v=np.interp(t*1000,[0,18,19,20,21,22,28,35,45,100],
+                    [-65,-65,-60,30,-65,-75,-65,-85,-65,-65])
+        event=first_event(Sweep(0,t,v))
+        r=event['measurements']
+        self.assertAlmostEqual(r['AHP Location (ms)'],22.)
+        self.assertAlmostEqual(r['AHP trough search end (ms)'],r['SPIKE Half fall (ms)']+3.)
+        self.assertLessEqual(r['AHP Location (ms)'],r['SPIKE Half fall (ms)']+3.)
+        # Recovery and the displayed tail can extend past the trough-search cutoff.
+        self.assertGreater(r['AHP Half fall (ms)'],r['AHP trough search end (ms)'])
+        self.assertGreater(event['time_ms'][-1],35.)
+        # With only a late trough, report unresolved instead of selecting it.
+        v=np.interp(t*1000,[0,18,19,20,21,35,45,100],
+                    [-65,-65,-60,30,-65,-85,-65,-65])
+        r=first_event(Sweep(0,t,v))['measurements']
+        self.assertTrue(np.isnan(r['AHP Location (ms)']))
+
+    def test_legacy_reference_is_remeasured_with_new_ahp_rule(self):
+        from neuron_compare.core import ANALYSIS_VERSION, LEGACY_ANALYSIS_VERSION
+        event=demo_event()
+        event['analysis_version']=LEGACY_ANALYSIS_VERSION
+        event['measurements']['AHP Location (ms)']=39.
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'legacy.json'
+            save_collection(path,[event])
+            restored=load_collection(path)[0]
+        self.assertEqual(restored['analysis_version'],ANALYSIS_VERSION)
+        self.assertAlmostEqual(restored['measurements']['AHP Location (ms)'],22.5)
+        np.testing.assert_array_equal(restored['time_ms'],event['time_ms'])
+
+    def test_missing_half_fall_and_early_injection_end_do_not_find_late_ahp(self):
+        for end_ms in (20.2,21.8):
+            event=first_event(self.train(),Settings(end_ms=end_ms))
+            self.assertTrue(np.isnan(event['measurements']['AHP Location (ms)']))
+        r=first_event(self.train(),Settings(end_ms=20.2))['measurements']
+        self.assertIn('No AP half-fall',r['Status'])

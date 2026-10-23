@@ -3,7 +3,8 @@ from dataclasses import dataclass, asdict
 import numpy as np
 from .measurements import analyze_events, detect_peaks
 
-ANALYSIS_VERSION = 'first-event-1.0'
+ANALYSIS_VERSION = 'first-event-1.1'
+LEGACY_ANALYSIS_VERSION = 'first-event-1.0'
 MARKERS = ('Location', 'Onset', 'Rise 10%', 'Rise 90%', 'Half rise', 'Half fall')
 
 

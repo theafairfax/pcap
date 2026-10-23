@@ -81,17 +81,26 @@ def analyze_events(t, v, start_s, end_s, height=-10., prominence=20.,
                     "SPIKE Width (ms)": right-left,
                     "Threshold Vm (mV)": baseline,
                     "AP amplitude (mV)": float(v[peak]-baseline)})
+        # Limit trough identification only; retain the longer capture/recovery window.
+        # The cutoff is anchored to the interpolated AP falling half-height crossing.
+        if not np.isfinite(right):
+            row["Status"] = "No AP half-fall crossing; AHP search unavailable"
+            rows.append(row)
+            continue
+        trough_end_ms = min(float(tm[stop]), right + 3.)
+        trough_stop = min(stop, int(np.searchsorted(tm, trough_end_ms, side='right'))-1)
+        row["AHP trough search end (ms)"] = trough_end_ms
         # AHP starts when the repolarizing AP crosses back below its threshold Vm.
-        ahp_on = crossing(tm, v, baseline, peak, stop, False)
+        ahp_on = crossing(tm, v, baseline, peak, trough_stop, False)
         if not np.isfinite(ahp_on):
             row["Status"] = "No post-AP threshold return in AHP window"
         else:
             first = int(np.searchsorted(tm, ahp_on))
-            if stop <= first:
+            if trough_stop <= first:
                 row["Status"] = "AHP window truncated"
             else:
-                trough = first + int(np.argmin(v[first:stop+1]))
-                if trough >= stop or v[trough] >= baseline:
+                trough = first + int(np.argmin(v[first:trough_stop+1]))
+                if trough >= trough_stop or v[trough] >= baseline:
                     row["Status"] = "No resolved AHP trough before window boundary"
                 else:
                     ahalf = baseline + (v[trough]-baseline)/2.

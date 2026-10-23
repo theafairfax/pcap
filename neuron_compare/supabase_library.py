@@ -9,7 +9,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 import numpy as np
-from .core import ANALYSIS_VERSION, coordinates
+from .core import ANALYSIS_VERSION, LEGACY_ANALYSIS_VERSION, coordinates
 from .references import clean, parse_collection
 
 BUCKET = 'pcap-references'
@@ -58,7 +58,7 @@ def catalog(url, key):
     rows=[]
     for offset in range(0,1000000,500):
         params=urllib.parse.urlencode(dict(select='id,label,species,region,analysis_version,storage_path,metadata,plot_bounds',
-                                          analysis_version='eq.'+ANALYSIS_VERSION,order='id.asc',limit=500,offset=offset))
+                                          analysis_version=f'in.({ANALYSIS_VERSION},{LEGACY_ANALYSIS_VERSION})',order='id.asc',limit=500,offset=offset))
         page=json.loads(request(url,key,'/rest/v1/'+TABLE+'?'+params))
         if not isinstance(page,list):
             raise ValueError('Unexpected Supabase catalog response.')

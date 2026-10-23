@@ -55,7 +55,7 @@ with st.sidebar:
         height=st.number_input('Minimum AP peak (mV)',value=-10.)
         prominence=st.number_input('Minimum prominence (mV)',min_value=0.,value=20.)
         dvdt=st.number_input('Onset dV/dt (mV/ms)',min_value=.1,value=20.)
-        ahp_window=st.number_input('AHP search after AP peak (ms)',min_value=1.,value=50.)
+        ahp_window=st.number_input('Captured recovery after AP peak (ms)',min_value=1.,value=50.,help='Limits captured waveform and recovery measurements. AHP trough detection always stops 3 ms after AP half-fall, or earlier at the capture boundary.')
         custom=st.checkbox('Set injection window manually')
         start=st.number_input('Injection start (ms)',min_value=0.,value=100.,disabled=not custom)
         end=st.number_input('Injection end (ms)',min_value=0.,value=600.,disabled=not custom)
@@ -131,7 +131,7 @@ if upload is not None:
             fig.add_vrect(x0=meta['injection_start_ms'],x1=meta['injection_end_ms'],fillcolor='#14b8a6',opacity=.12,line_width=0)
             fig.update_layout(xaxis_title='Sweep time (ms)',yaxis_title='Vm (mV)',height=280)
             st.plotly_chart(fig,width='stretch')
-            st.caption(meta['window_source']+'. Analysis uses only the first AP during this window. AHP searches stop at the next AP onset, window end, or configured limit.')
+            st.caption(meta['window_source']+'. Analysis uses only the first AP during this window. AHP trough searches end 3 ms after AP half-fall, or earlier at the next AP onset, window end, or capture limit.')
     except Exception as err:
         st.warning(str(err)); st.stop()
 elif demo:
