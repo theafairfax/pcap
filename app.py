@@ -71,15 +71,34 @@ except FileNotFoundError:
     cloud_config={}
 cloud_url=cloud_config.get('url','')
 cloud_key=cloud_config.get('publishable_key','')
-options=paths+(['Supabase library'] if cloud_url and cloud_key else [])
-if not options:
-    st.error('Add a local reference collection or configure Supabase in Streamlit secrets.'); st.stop()
+options=paths+(['Supabase library'] if cloud_url and cloud_key else [])+['User Uploaded']
 try:
     with st.sidebar:
         st.header('Reference collection')
         path=st.selectbox('Collection',options,format_func=lambda p:p.stem if isinstance(p,Path) else p)
     remote=path=='Supabase library'
-    if remote:
+    user_uploaded=path=='User Uploaded'
+    if user_uploaded:
+        with st.sidebar:
+            reference_upload=st.file_uploader('Reference rheobase recording',type=['abf','axgd','axgx'],
+                                             accept_multiple_files=False,key='reference_upload')
+            reference_channel=st.number_input('Reference voltage channel rank (0-based)',0,32,0,
+                                              help='Rank among voltage channels in the reference recording.')
+            st.caption('Both recordings use the settings in Adjust analysis. Each selected sweep contributes its first AP and AHP.')
+        if reference_upload is None:
+            st.info('Upload a reference rheobase recording to compare with your neuron.'); st.stop()
+        reference_data=reference_upload.getvalue()
+        reference_identity=hashlib.sha256(reference_data).hexdigest()[:12]
+        reference_sweeps=read_recording(reference_data,reference_upload.name,int(reference_channel))
+        reference_counts=[count_spikes(s,settings) for s in reference_sweeps]
+        reference_default=next((i for i,n in enumerate(reference_counts) if n),0)
+        reference_selected=st.sidebar.selectbox('Reference sweep',range(len(reference_sweeps)),index=reference_default,
+            format_func=lambda i:f'Sweep {reference_sweeps[i].index} · {reference_counts[i]} APs',
+            key='reference_sweep_'+reference_identity)
+        reference_event=analyze(reference_sweeps[reference_selected],settings)
+        reference_event['metadata'].update(label=reference_upload.name,source='User Uploaded',id=reference_identity)
+        references=[reference_event]
+    elif remote:
         validate_browser_key(cloud_key)
         if st.sidebar.button('Refresh cloud library'):
             read_cloud_catalog.clear()
@@ -124,30 +143,37 @@ else:
 
 left,right=st.columns([3,1],gap='large')
 with right:
-    st.subheader('Browse neurons')
-    species=st.selectbox('Species',['All']+sorted({str(r['metadata'].get('species') or 'Unknown') for r in references}))
-    species_pool=[r for r in references if species=='All' or str(r['metadata'].get('species') or 'Unknown')==species]
-    regions=['All']+sorted({str(r['metadata'].get('region') or 'Unknown') for r in species_pool})
-    if st.session_state.get('reference_region','All') not in regions:
-        st.session_state['reference_region']='All'
-    region=st.selectbox('Region',regions,key='reference_region')
-    pool=[r for r in species_pool if region=='All' or str(r['metadata'].get('region') or 'Unknown')==region]
-    pool_key=(str(path),species,region)
-    if st.session_state.get('pool_key')!=pool_key:
-        st.session_state['pool_key']=pool_key; st.session_state['reference_index']=0
-    st.session_state['reference_index']=min(st.session_state.get('reference_index',0),len(pool)-1)
-    a,b=st.columns(2)
-    a.button('← Previous',on_click=step_reference,args=(-1,len(pool)),width='stretch')
-    b.button('Next →',on_click=step_reference,args=(1,len(pool)),width='stretch')
-    idx=st.selectbox('Reference neuron',range(len(pool)),format_func=lambda i:pool[i]['metadata']['label'],key='reference_index')
-    selected_reference=pool[idx]
-    if remote:
-        try:
-            ref=read_cloud_event(cloud_url,cloud_key,selected_reference)
-        except Exception as err:
-            st.error(f'Could not load selected reference: {err}'); st.stop()
+    if user_uploaded:
+        st.subheader('Uploaded reference')
+        pool=references
+        idx=0
+        ref=references[0]
+        st.write(ref['metadata']['label'])
     else:
-        ref=selected_reference
+        st.subheader('Browse neurons')
+        species=st.selectbox('Species',['All']+sorted({str(r['metadata'].get('species') or 'Unknown') for r in references}))
+        species_pool=[r for r in references if species=='All' or str(r['metadata'].get('species') or 'Unknown')==species]
+        regions=['All']+sorted({str(r['metadata'].get('region') or 'Unknown') for r in species_pool})
+        if st.session_state.get('reference_region','All') not in regions:
+            st.session_state['reference_region']='All'
+        region=st.selectbox('Region',regions,key='reference_region')
+        pool=[r for r in species_pool if region=='All' or str(r['metadata'].get('region') or 'Unknown')==region]
+        pool_key=(str(path),species,region)
+        if st.session_state.get('pool_key')!=pool_key:
+            st.session_state['pool_key']=pool_key; st.session_state['reference_index']=0
+        st.session_state['reference_index']=min(st.session_state.get('reference_index',0),len(pool)-1)
+        a,b=st.columns(2)
+        a.button('← Previous',on_click=step_reference,args=(-1,len(pool)),width='stretch')
+        b.button('Next →',on_click=step_reference,args=(1,len(pool)),width='stretch')
+        idx=st.selectbox('Reference neuron',range(len(pool)),format_func=lambda i:pool[i]['metadata']['label'],key='reference_index')
+        selected_reference=pool[idx]
+        if remote:
+            try:
+                ref=read_cloud_event(cloud_url,cloud_key,selected_reference)
+            except Exception as err:
+                st.error(f'Could not load selected reference: {err}'); st.stop()
+        else:
+            ref=selected_reference
     meta=ref['metadata']
     st.caption(f'{idx+1} of {len(pool)}')
     if meta.get('synthetic'):
