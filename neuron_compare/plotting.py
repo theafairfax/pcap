@@ -8,9 +8,9 @@ COLORS = ('#e05252', '#9063cf', '#039eb7', '#13a475', '#d88e20', '#d359a0')
 
 def overlay(query, reference, cohort, block='SPIKE', mode='Event location', normalize=False, highlight='All markers', range_bounds=None):
     fig = go.Figure()
-    ranges = list(range_bounds or [])
-    # Always include displayed traces: older cloud bounds may describe the cropped AP.
-    for event in [query,reference]+list(cohort):
+    # Legacy cohort bounds describe longer captures; fit only the visible pair.
+    ranges = []
+    for event in [query,reference]:
         if event is None:
             continue
         try:
@@ -36,7 +36,7 @@ def overlay(query, reference, cohort, block='SPIKE', mode='Event location', norm
             if highlight != 'All markers' and marker != highlight:
                 continue
             value = r.get(f'{block} {marker} (ms)',np.nan)
-            if not np.isfinite(value):
+            if not np.isfinite(value) or not x[0] <= value-origin <= x[-1]:
                 continue
             mv = (np.interp(value,event['time_ms'],event['voltage_mv'])-base)/scale
             fig.add_vline(x=value-origin,line_color=c,opacity=opacity,line_width=1.2,
@@ -52,8 +52,6 @@ def overlay(query, reference, cohort, block='SPIKE', mode='Event location', norm
         a=np.asarray(ranges)
         xmin,xmax,ymin,ymax=a[:,0].min(),a[:,1].max(),a[:,2].min(),a[:,3].max()
         pad=max((ymax-ymin)*.08,.05 if normalize else 1.)
-        # Equal time on either side keeps the chosen alignment in the center.
-        extent=max(abs(xmin),abs(xmax),.1)*1.04
-        fig.update_xaxes(range=[-extent,extent],zeroline=True,zerolinecolor='#cbd5e1',tick0=0)
+        fig.update_xaxes(range=[xmin,xmax],zeroline=True,zerolinecolor='#cbd5e1',tick0=0)
         fig.update_yaxes(range=[ymin-pad,ymax+pad])
     return fig

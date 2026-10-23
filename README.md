@@ -63,20 +63,21 @@ the full sweep; set a manual window to exclude test pulses and rebound spikes.
 
 ## Display behavior
 
-- AP spike view includes the full captured post-spike tail, including AHP and
-  recovery. The capture still stops at the next AP onset, injection-window end,
-  or configured capture limit. The dedicated AHP view stays focused on AHP.
+- Both AP spike and AHP views show the same interval: **2 ms before AP onset
+  through 3 ms after AP half-fall**, limited to available captured samples. Each
+  trace uses its own AP landmarks. Display endpoints are interpolated between
+  samples. Measurements still use the full analysis/recovery capture. Markers
+  outside the visible window remain in the tables but are hidden on the plot.
 - Query: black waveform, solid colored marker lines.
 - Reference: gray waveform, faint dashed colored marker lines.
 - Plotly hover provides detailed values; scrolling the reference selector or
   pressing Previous/Next updates the overlay and comparison table.
-- Axes are fixed to the uploaded event plus the currently filtered reference
-  collection. Changing the collection, region, alignment or analysis may change
-  them. Plot zoom is available; the default range is restored on redraw.
+- Axes fit the two visible traces, ignoring older collection-wide plot bounds.
+  Plot zoom is available; the default range is restored on redraw.
 - Alignment is selected beside the waveform: **Peak / trough** puts each AP
   peak or AHP trough at zero; **Onset** puts each event onset at zero. Both
-  traces use their own chosen landmark. The X-axis is symmetric around zero
-  so the alignment is always centered. Onset alignment requires resolved onset.
+  traces use their own chosen landmark. The chosen landmark stays at zero;
+  axis limits follow the visible intervals. Onset alignment requires resolved onset.
 - Optional normalization sets AP threshold Vm to zero and divides by the event's
   absolute amplitude. Time is never stretched. Raw values remain in the table.
 - Absolute sweep times and times relative to each event's location are shown

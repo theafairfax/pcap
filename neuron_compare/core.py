@@ -95,13 +95,16 @@ def coordinates(event, block, mode, normalize):
     r = event['measurements']
     t, v = np.asarray(event['time_ms']), np.asarray(event['voltage_mv'])
     origin = alignment(event, block, mode)
-    peak = r['SPIKE Location (ms)']
-    if block == 'SPIKE':
-        # Keep the complete captured tail, including AHP and recovery.
-        mask = t >= peak-5.
-    else:
-        onset = r.get('AHP Onset (ms)', np.nan)
-        mask = t >= (onset if np.isfinite(onset) else peak+.5)
+    onset = r.get('SPIKE Onset (ms)', np.nan)
+    half_fall = r.get('SPIKE Half fall (ms)', np.nan)
+    if not np.isfinite(onset) or not np.isfinite(half_fall):
+        raise ValueError('Waveform display requires resolved AP onset and half-fall.')
+    lo, hi = max(t[0], onset-2.), min(t[-1], half_fall+3.)
+    if hi <= lo:
+        raise ValueError('No captured samples in the waveform display window.')
+    # Interpolate at the exact display boundaries, preserving all interior samples.
+    visible_t = np.concatenate(([lo], t[(t > lo) & (t < hi)], [hi]))
+    visible_v = np.interp(visible_t, t, v)
     base, scale = 0., 1.
     if normalize:
         base = r.get('Threshold Vm (mV)', np.nan)
@@ -109,4 +112,4 @@ def coordinates(event, block, mode, normalize):
         if not np.isfinite(base) or not np.isfinite(amplitude) or abs(amplitude) < 1e-9:
             raise ValueError(f'{block} normalization requires resolved threshold and amplitude.')
         scale = abs(amplitude)
-    return t[mask]-origin, (v[mask]-base)/scale, origin, base, scale
+    return visible_t-origin, (visible_v-base)/scale, origin, base, scale
