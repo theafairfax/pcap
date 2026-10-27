@@ -35,7 +35,7 @@ def parse_collection(data):
     events = data.get('events', [])
     ids = set()
     for event in events:
-        if event.get('analysis_version') not in (ANALYSIS_VERSION, LEGACY_ANALYSIS_VERSION):
+        if event.get('analysis_version') not in (ANALYSIS_VERSION, 'first-event-1.1', LEGACY_ANALYSIS_VERSION):
             raise ValueError('Reference measurements use a different analysis version; regenerate the collection.')
         event['time_ms'] = np.asarray(event['time_ms'], dtype=float)
         event['voltage_mv'] = np.asarray(event['voltage_mv'], dtype=float)
@@ -43,6 +43,11 @@ def parse_collection(data):
         if t.ndim != 1 or v.shape != t.shape or len(t) < 3 or not np.all(np.isfinite(t)) or not np.all(np.isfinite(v)) or not np.all(np.diff(t) > 0):
             raise ValueError('Reference waveform must contain finite, increasing time and matching voltage.')
         event['measurements'] = {k: np.nan if value is None else value for k,value in event['measurements'].items()}
+        if event['analysis_version'] == 'first-event-1.1':
+            # Identical legacy defaults; the new analysis options are opt-in.
+            event['settings'].setdefault('ahp_trough_window_ms', 3.)
+            event['settings'].setdefault('ahp_post_injection', False)
+            event['analysis_version'] = ANALYSIS_VERSION
         if event['analysis_version'] == LEGACY_ANALYSIS_VERSION:
             # Legacy captures retain the AP and recovery samples needed for the new cutoff.
             settings = dict(event['settings'])
