@@ -21,7 +21,8 @@ def detect_peaks(t, v, height=-10., prominence=20., separation_ms=2.):
 
 
 def analyze_events(t, v, start_s, end_s, height=-10., prominence=20.,
-                   separation_ms=2., dvdt_threshold=20., ahp_window_ms=50.):
+                   separation_ms=2., dvdt_threshold=20., ahp_window_ms=50.,
+                   ahp_trough_window_ms=3., ahp_post_injection=False):
     t = np.asarray(t, dtype=float)
     v = np.asarray(v, dtype=float)
     if len(t) < 3 or len(t) != len(v) or not np.all(np.isfinite(v)):
@@ -29,6 +30,8 @@ def analyze_events(t, v, start_s, end_s, height=-10., prominence=20.,
     dt = float(np.median(np.diff(t)))
     if dt <= 0 or start_s >= end_s:
         raise ValueError("Use increasing time and a nonempty analysis window.")
+    if ahp_window_ms <= 0 or ahp_trough_window_ms <= 0:
+        raise ValueError('AHP search and recovery windows must be positive.')
     tm = t * 1000.
     dv = np.gradient(v, tm)
     peaks = detect_peaks(t, v, height, prominence, separation_ms)
@@ -65,7 +68,10 @@ def analyze_events(t, v, start_s, end_s, height=-10., prominence=20.,
         baseline = float(v[onset])
         next_start = (onsets[n+1] if onsets[n+1] is not None else int(peaks[n+1])) if n+1 < len(peaks) else len(v)-1
         # Bound AP width and AHP by next AP, search window, and analysis end.
-        stop = min(next_start, int(np.searchsorted(t, end_s)), len(v)-1,
+        # AHP can continue beyond current injection if explicitly enabled.
+        # Never cross another AP or the acquisition boundary.
+        analysis_limit = len(v)-1 if ahp_post_injection else int(np.searchsorted(t, end_s))
+        stop = min(next_start, analysis_limit, len(v)-1,
                    peak + max(2, int(ahp_window_ms/1000/dt)))
         half = baseline + (v[peak]-baseline)/2.
         left = crossing(tm, v, half, onset, peak, True)
@@ -87,7 +93,7 @@ def analyze_events(t, v, start_s, end_s, height=-10., prominence=20.,
             row["Status"] = "No AP half-fall crossing; AHP search unavailable"
             rows.append(row)
             continue
-        trough_end_ms = min(float(tm[stop]), right + 3.)
+        trough_end_ms = min(float(tm[stop]), right + ahp_trough_window_ms)
         trough_stop = min(stop, int(np.searchsorted(tm, trough_end_ms, side='right'))-1)
         row["AHP trough search end (ms)"] = trough_end_ms
         # AHP starts when the repolarizing AP crosses back below its threshold Vm.
@@ -100,6 +106,7 @@ def analyze_events(t, v, start_s, end_s, height=-10., prominence=20.,
                 row["Status"] = "AHP window truncated"
             else:
                 trough = first + int(np.argmin(v[first:trough_stop+1]))
+                # A boundary minimum is unresolved, not a measured trough.
                 if trough >= trough_stop or v[trough] >= baseline:
                     row["Status"] = "No resolved AHP trough before window boundary"
                 else:
