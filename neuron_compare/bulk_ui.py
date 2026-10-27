@@ -22,13 +22,20 @@ def render_bulk():
         height = st.number_input('Bulk minimum AP peak (mV)',value=-10.)
         prominence = st.number_input('Bulk minimum prominence (mV)',min_value=0.,value=20.)
         dvdt = st.number_input('Bulk onset dV/dt (mV/ms)',min_value=.1,value=20.)
-        recovery = st.number_input('Bulk captured recovery after AP peak (ms)',min_value=1.,value=50.)
+        recovery = st.number_input('Bulk captured recovery after AP peak (ms)',min_value=1.,value=100.,
+                                   help='Maximum post-peak search/capture duration; stops at the next AP or recording boundary.')
+        trough_window = st.number_input('Bulk AHP trough search after AP half-fall (ms)',
+                                        min_value=1.,max_value=100.,value=10.,step=1.,
+                                        help='Search for the AHP minimum beyond AP half-fall. Increase for slower AHPs, but inspect late minima to avoid including slow drift.')
+        post_injection = st.checkbox('Allow AHP recovery after injection ends', value=True,
+                                     help='Use recorded post-step voltage to measure the AHP, without including later action potentials.')
         manual = st.checkbox('Set bulk injection window manually')
         start = st.number_input('Bulk injection start (ms)',min_value=0.,value=100.,disabled=not manual)
         end = st.number_input('Bulk injection end (ms)',min_value=0.,value=600.,disabled=not manual)
     settings = Settings(height=height,prominence=prominence,dvdt_threshold=dvdt,ahp_window_ms=recovery,
+                        ahp_trough_window_ms=trough_window,ahp_post_injection=post_injection,
                         start_ms=start if manual else None,end_ms=end if manual else None)
-    st.caption('AHP trough search ends 3 ms after AP half-fall. AP and AHP half width = half-fall time − half-rise time. Unresolved values are blank in the CSV; failed files retain an explanatory row.')
+    st.caption('AHP trough search and recovery are independently configurable. AP and AHP half widths = half-fall − half-rise. Unresolved troughs or half-recovery crossings remain blank instead of being guessed. Review unusually late AHP troughs against the raw trace.')
     files = []
     for i, upload in enumerate(uploads or []):
         digest = hashlib.sha256(upload.getvalue()).hexdigest()
