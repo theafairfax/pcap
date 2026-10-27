@@ -3,7 +3,7 @@ from dataclasses import dataclass, asdict
 import numpy as np
 from .measurements import analyze_events, detect_peaks
 
-ANALYSIS_VERSION = 'first-event-1.1'
+ANALYSIS_VERSION = 'first-event-1.2'
 LEGACY_ANALYSIS_VERSION = 'first-event-1.0'
 MARKERS = ('Location', 'Onset', 'Rise 10%', 'Rise 90%', 'Half rise', 'Half fall')
 
@@ -15,6 +15,8 @@ class Settings:
     separation_ms: float = 2.
     dvdt_threshold: float = 20.
     ahp_window_ms: float = 50.
+    ahp_trough_window_ms: float = 3.
+    ahp_post_injection: bool = False
     start_ms: float | None = None
     end_ms: float | None = None
 
