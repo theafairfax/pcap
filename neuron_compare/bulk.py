@@ -11,8 +11,9 @@ STANDARD_METRICS = ('Peak Vm (mV)', 'Amplitude from AP threshold (mV)',
                     'Onset relative to event location (ms)', 'Rise 10–90% (ms)', 'Half width (ms)')
 KINETIC_COLUMNS = ([f'AP {name}' for name in STANDARD_METRICS]
                    + [f'AHP {name}' for name in ('Trough Vm (mV)',)+STANDARD_METRICS[1:]]
-                   + ['AP peak to AHP trough (ms)'])
-MARKER_COLUMNS = [f'{block} {marker} (ms)' for block in ('AP','AHP') for marker in MARKERS]
+                   + ['AP peak to AHP trough (ms)', 'AHP onset time (ms)', 'AHP trough time (ms)',\n                      'AHP trough voltage (mV)', 'AHP half-fall time (ms)',\n                      'AHP rebound time (ms)', 'AHP rebound latency from trough (ms)'])
+MARKER_COLUMNS = ([f'AP {marker} (ms)' for marker in MARKERS if marker != 'Rebound']
+                  + [f'AHP {marker} (ms)' for marker in MARKERS])
 COLUMNS = (['File ID','Filename','Status','Detail','Sweep','APs in selected sweep','Analysis version',
             'Voltage channel rank','Analysis settings','Injection start (ms)','Injection end (ms)',
             'Injection window source','AP threshold Vm (mV)'] + KINETIC_COLUMNS + MARKER_COLUMNS)
@@ -44,7 +45,7 @@ def analyze_file(data, filename, channel=0, settings=Settings()):
                     'AP threshold Vm (mV)': r['Threshold Vm (mV)']})
         for block, label in (('SPIKE','AP'), ('AHP','AHP')):
             for name, value in metrics(event, block).items():
-                if name == 'AP peak to trough (ms)':
+                if name.startswith('AHP ') and name in KINETIC_COLUMNS:\n                    row[name] = value\n                elif name == 'AP peak to trough (ms)':
                     row['AP peak to AHP trough (ms)'] = value
                 elif name == 'Half-height width (ms)':
                     # Explicitly use the two half-height crossings for both events.
@@ -53,7 +54,7 @@ def analyze_file(data, filename, channel=0, settings=Settings()):
                     row[f'{label} {name}'] = value
             for marker in MARKERS:
                 row[f'{label} {marker} (ms)'] = r.get(f'{block} {marker} (ms)', np.nan)
-        row['Status'] = 'OK' if all(np.isfinite(row[c]) for c in KINETIC_COLUMNS) else 'Partial'
+        required = [c for c in KINETIC_COLUMNS if 'rebound' not in c.lower()]\n        row['Status'] = 'OK' if all(np.isfinite(row[c]) for c in required) else 'Partial'
         row['Detail'] = r['Status']
     except Exception as err:
         row.update(Status='Error', Detail=str(err))

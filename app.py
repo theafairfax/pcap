@@ -195,7 +195,7 @@ def render_visualizer():
         alignment='Event location' if align_choice=='Peak / trough' else 'Event onset'
         st.plotly_chart(overlay(query,ref,[] if remote else pool,block,alignment,normalize,highlight),
                         width='stretch',key='overlay')
-        st.caption('Black: your neuron · Gray: reference · Solid markers: yours · Dashed markers: reference. Both views show 2 ms before AP onset through 3 ms after AP half-fall, limited to captured samples. Each trace uses its own landmarks; axes fit the displayed pair.')
+        st.caption('Black: your neuron · Gray: reference · Solid markers: yours · Dashed markers: reference. The AP view shows 2 ms before onset to 3 ms after AP half-fall; the AHP view extends to the trough and detected rebound peak when available, limited to captured samples. Each trace uses its own landmarks; axes fit the displayed pair.')
         for event,label in [(query,'Your neuron'),(ref,'Reference')]:
             if not all(np.isfinite(event['measurements'].get(k,np.nan)) for k in ('SPIKE Onset (ms)','SPIKE Half fall (ms)')):
                 st.warning(label+': waveform display requires resolved AP onset and half-fall.')

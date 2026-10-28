@@ -67,7 +67,10 @@ class CoreTests(unittest.TestCase):
                 for normalize in (False,True):
                     x,y,origin,base,scale=coordinates(event,block,mode,normalize)
                     self.assertAlmostEqual(x[0]+origin,r['SPIKE Onset (ms)']-2.)
-                    self.assertAlmostEqual(x[-1]+origin,r['SPIKE Half fall (ms)']+3.)
+                    if block == 'SPIKE':
+                        self.assertAlmostEqual(x[-1]+origin,r['SPIKE Half fall (ms)']+3.)
+                    else:
+                        self.assertGreaterEqual(x[-1]+origin,r['AHP Location (ms)']+3.)
                     self.assertAlmostEqual(y[-1],(np.interp(x[-1]+origin,event['time_ms'],event['voltage_mv'])-base)/scale)
         # Cropping the display does not discard stored recovery samples.
         self.assertGreater(event['time_ms'][-1],r['SPIKE Half fall (ms)']+3.)

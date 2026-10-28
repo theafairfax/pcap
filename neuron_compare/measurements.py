@@ -60,7 +60,7 @@ def analyze_events(t, v, start_s, end_s, height=-10., prominence=20.,
                "AHP Rise (ms)": np.nan, "AHP Width (ms)": np.nan,
                "Threshold Vm (mV)": np.nan, "AP amplitude (mV)": np.nan,
                "AHP amplitude from threshold (mV)": np.nan,
-               "AHP trough Vm (mV)": np.nan, "Status": ""}
+               "AHP trough Vm (mV)": np.nan, "AHP Rebound (ms)": np.nan,\n               "AHP Rebound latency (ms)": np.nan, "AHP Rebound Vm (mV)": np.nan, "Status": ""}
         if onset is None:
             row["Status"] = "No dV/dt threshold crossing"
             rows.append(row)
@@ -125,12 +125,29 @@ def analyze_events(t, v, start_s, end_s, height=-10., prominence=20.,
                         "AHP Width (ms)": up-down,
                         "AHP amplitude from threshold (mV)": float(v[trough]-baseline),
                         "AHP trough Vm (mV)": float(v[trough])})
+                    # First post-trough local maximum, excluding one-sample noise reversals.
+                    # Require at least two consecutive non-decreasing increments followed
+                    # by a decreasing increment; do not call the capture endpoint a peak.
+                    # This is a descriptive rebound landmark, not AP firing detection.
+                    recovery = v[trough:stop+1]
+                    if len(recovery) >= 4:
+                        diffs = np.diff(recovery)
+                        # A local maximum must show a meaningful fall within the
+                        # captured recovery, not just one noisy downward sample.
+                        rebound_candidates = [k for k in range(2, len(recovery)-1)
+                                              if diffs[k-2] > 0 and diffs[k-1] >= 0 and diffs[k] < 0
+                                              and recovery[k] - np.min(recovery[k+1:]) >= 1.0]
+                        if rebound_candidates:
+                            rebound_idx = trough + rebound_candidates[0]
+                            row["AHP Rebound (ms)"] = float(tm[rebound_idx])
+                            row["AHP Rebound latency (ms)"] = float(tm[rebound_idx]-tm[trough])
+                            row["AHP Rebound Vm (mV)"] = float(v[rebound_idx])
                     row["Status"] = "OK" if np.isfinite(up) else "AHP half-recovery truncated; width unavailable"
         rows.append(row)
     for row in rows:
         for block in ("SPIKE", "AHP"):
             origin = row[block+" Location (ms)"]
-            for label in ("Location", "Onset", "Rise 10%", "Rise 90%", "Half rise", "Half fall"):
+            for label in (("Location", "Onset", "Rise 10%", "Rise 90%", "Half rise", "Half fall", "Rebound") if block == "AHP" else ("Location", "Onset", "Rise 10%", "Rise 90%", "Half rise", "Half fall")):
                 key = f"{block} {label} (ms)"
                 row.setdefault(key, np.nan)
                 row[f"{block} {label} relative (ms)"] = row[key]-origin
