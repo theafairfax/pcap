@@ -81,7 +81,12 @@ def metrics(event, block):
         'Onset relative to event location (ms)': onset-peak,
         'Rise 10–90% (ms)': r[f'{block} Rise (ms)'],
         'Half-height width (ms)': r[f'{block} Width (ms)'],
-        **({'AP peak to trough (ms)': peak-origin,\n            'AHP onset time (ms)': onset, 'AHP trough time (ms)': peak,\n            'AHP trough voltage (mV)': r['AHP trough Vm (mV)'],\n            'AHP half-fall time (ms)': r.get('AHP Half fall (ms)', np.nan),\n            'AHP rebound time (ms)': r.get('AHP Rebound (ms)', np.nan),\n            'AHP rebound latency from trough (ms)': r.get('AHP Rebound latency (ms)', np.nan)} if block == 'AHP' else {})}
+        **({'AP peak to trough (ms)': peak-origin,
+            'AHP onset time (ms)': onset, 'AHP trough time (ms)': peak,
+            'AHP trough voltage (mV)': r['AHP trough Vm (mV)'],
+            'AHP half-fall time (ms)': r.get('AHP Half fall (ms)', np.nan),
+            'AHP rebound time (ms)': r.get('AHP Rebound (ms)', np.nan),
+            'AHP rebound latency from trough (ms)': r.get('AHP Rebound latency (ms)', np.nan)} if block == 'AHP' else {})}
 
 
 def alignment(event, block, mode):
