@@ -132,8 +132,11 @@ def analyze_events(t, v, start_s, end_s, height=-10., prominence=20.,
                     recovery = v[trough:stop+1]
                     if len(recovery) >= 4:
                         diffs = np.diff(recovery)
+                        # A local maximum must show a meaningful fall within the
+                        # captured recovery, not just one noisy downward sample.
                         rebound_candidates = [k for k in range(2, len(recovery)-1)
-                                              if diffs[k-2] > 0 and diffs[k-1] >= 0 and diffs[k] < 0]
+                                              if diffs[k-2] > 0 and diffs[k-1] >= 0 and diffs[k] < 0
+                                              and recovery[k] - np.min(recovery[k+1:]) >= 1.0]
                         if rebound_candidates:
                             rebound_idx = trough + rebound_candidates[0]
                             row["AHP Rebound (ms)"] = float(tm[rebound_idx])
