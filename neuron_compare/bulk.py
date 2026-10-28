@@ -12,7 +12,8 @@ STANDARD_METRICS = ('Peak Vm (mV)', 'Amplitude from AP threshold (mV)',
 KINETIC_COLUMNS = ([f'AP {name}' for name in STANDARD_METRICS]
                    + [f'AHP {name}' for name in ('Trough Vm (mV)',)+STANDARD_METRICS[1:]]
                    + ['AP peak to AHP trough (ms)', 'AHP onset time (ms)', 'AHP trough time (ms)',\n                      'AHP trough voltage (mV)', 'AHP half-fall time (ms)',\n                      'AHP rebound time (ms)', 'AHP rebound latency from trough (ms)'])
-MARKER_COLUMNS = [f'{block} {marker} (ms)' for block in ('AP','AHP') for marker in MARKERS]
+MARKER_COLUMNS = ([f'AP {marker} (ms)' for marker in MARKERS if marker != 'Rebound']
+                  + [f'AHP {marker} (ms)' for marker in MARKERS])
 COLUMNS = (['File ID','Filename','Status','Detail','Sweep','APs in selected sweep','Analysis version',
             'Voltage channel rank','Analysis settings','Injection start (ms)','Injection end (ms)',
             'Injection window source','AP threshold Vm (mV)'] + KINETIC_COLUMNS + MARKER_COLUMNS)
