@@ -60,7 +60,8 @@ def analyze_events(t, v, start_s, end_s, height=-10., prominence=20.,
                "AHP Rise (ms)": np.nan, "AHP Width (ms)": np.nan,
                "Threshold Vm (mV)": np.nan, "AP amplitude (mV)": np.nan,
                "AHP amplitude from threshold (mV)": np.nan,
-               "AHP trough Vm (mV)": np.nan, "AHP Rebound (ms)": np.nan,\n               "AHP Rebound latency (ms)": np.nan, "AHP Rebound Vm (mV)": np.nan, "Status": ""}
+               "AHP trough Vm (mV)": np.nan, "AHP Rebound (ms)": np.nan,
+               "AHP Rebound latency (ms)": np.nan, "AHP Rebound Vm (mV)": np.nan, "Status": ""}
         if onset is None:
             row["Status"] = "No dV/dt threshold crossing"
             rows.append(row)
