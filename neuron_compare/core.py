@@ -102,6 +102,14 @@ def coordinates(event, block, mode, normalize):
     if not np.isfinite(onset) or not np.isfinite(half_fall):
         raise ValueError('Waveform display requires resolved AP onset and half-fall.')
     lo, hi = max(t[0], onset-2.), min(t[-1], half_fall+3.)
+    if block == 'AHP':
+        # Include the trough and any detected rebound peak in the AHP view.
+        trough = r.get('AHP Location (ms)', np.nan)
+        rebound = r.get('AHP Rebound (ms)', np.nan)
+        if np.isfinite(trough):
+            hi = min(t[-1], max(hi, trough+3.))
+        if np.isfinite(rebound):
+            hi = min(t[-1], max(hi, rebound+1.))
     if hi <= lo:
         raise ValueError('No captured samples in the waveform display window.')
     # Interpolate at the exact display boundaries, preserving all interior samples.
