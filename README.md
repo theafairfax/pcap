@@ -281,3 +281,34 @@ reference collections and uses its own analysis settings.
 
 Changing uploads or bulk settings requires reprocessing. Changing group selections
 requires clicking Analyze again before comparison results are shown.
+
+### AHP landmarks (analysis definition `first-event-1.3`)
+
+The AHP kinetics export and visualizer now include **AHP onset time**, **AHP
+trough time**, **AHP trough voltage**, **AHP half-fall time**, **AHP rebound
+time**, and **AHP rebound latency from trough**. These markers are shown as
+sweep-relative times, in milliseconds; trough voltage is in mV.
+
+- **Onset:** first *linearly interpolated* downward crossing of the AP threshold
+  voltage following the AP peak.
+- **Trough time/voltage:** time and voltage of the lowest *recorded sample* in
+  the configured fast/slow trough search window; unresolved boundary minima
+  remain missing.
+- **Half-fall:** first *linearly interpolated upward recovery* crossing of the
+  midpoint between AP threshold voltage and AHP trough voltage. PCAP retains
+  its earlier naming: `AHP Half rise` is the downward midpoint crossing,
+  and `AHP Half fall` is the upward recovery crossing.
+- **Rebound:** first post-trough recorded local maximum after at least two
+  non-decreasing recovery increments and a subsequent decrease of at least
+  1 mV within the available capture. The time is the sampled maximum; latency
+  is rebound time minus trough time. No qualifying maximum means a missing
+  value, **not** zero. This heuristic is a descriptive event marker, and may
+  also detect an oscillation rather than a genuine ADP; inspect traces.
+
+The AHP plot extends to a detected rebound peak when possible; the AP display
+keeps its original window. Bulk CSVs and group box plots include the new
+landmarks. Missing rebound peaks do not change an otherwise complete AHP
+status to Partial. AHP trough detection remains constrained by the configurable
+trough window; rebound detection cannot extend past the captured segment or
+next AP. Older saved reference events may not contain these landmarks until
+re-analyzed from their originating recordings.
