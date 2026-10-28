@@ -3,9 +3,9 @@ from dataclasses import dataclass, asdict
 import numpy as np
 from .measurements import analyze_events, detect_peaks
 
-ANALYSIS_VERSION = 'first-event-1.2'
+ANALYSIS_VERSION = 'first-event-1.3'
 LEGACY_ANALYSIS_VERSION = 'first-event-1.0'
-MARKERS = ('Location', 'Onset', 'Rise 10%', 'Rise 90%', 'Half rise', 'Half fall')
+MARKERS = ('Location', 'Onset', 'Rise 10%', 'Rise 90%', 'Half rise', 'Half fall', 'Rebound')
 
 
 @dataclass(frozen=True)
@@ -81,7 +81,7 @@ def metrics(event, block):
         'Onset relative to event location (ms)': onset-peak,
         'Rise 10–90% (ms)': r[f'{block} Rise (ms)'],
         'Half-height width (ms)': r[f'{block} Width (ms)'],
-        **({'AP peak to trough (ms)': peak-origin} if block == 'AHP' else {})}
+        **({'AP peak to trough (ms)': peak-origin,\n            'AHP onset time (ms)': onset, 'AHP trough time (ms)': peak,\n            'AHP trough voltage (mV)': r['AHP trough Vm (mV)'],\n            'AHP half-fall time (ms)': r.get('AHP Half fall (ms)', np.nan),\n            'AHP rebound time (ms)': r.get('AHP Rebound (ms)', np.nan),\n            'AHP rebound latency from trough (ms)': r.get('AHP Rebound latency (ms)', np.nan)} if block == 'AHP' else {})}
 
 
 def alignment(event, block, mode):
