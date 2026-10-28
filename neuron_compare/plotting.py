@@ -3,7 +3,7 @@ import numpy as np
 import plotly.graph_objects as go
 from .core import MARKERS, coordinates
 
-COLORS = ('#e05252', '#9063cf', '#039eb7', '#13a475', '#d88e20', '#d359a0')
+COLORS = ('#e05252', '#9063cf', '#039eb7', '#13a475', '#d88e20', '#d359a0', '#7557a6')
 
 
 def overlay(query, reference, cohort, block='SPIKE', mode='Event location', normalize=False, highlight='All markers', range_bounds=None):
