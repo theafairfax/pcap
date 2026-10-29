@@ -3,7 +3,8 @@ import hashlib
 from dataclasses import asdict
 import streamlit as st
 from .core import Settings
-from .bulk import analyze_file, results_frame, export_frame, compare_multiple_groups, GROUP_COLORS
+from .bulk import (analyze_file, results_frame, export_frame, import_kinetics_csv,
+                   compare_multiple_groups, pairwise_statistics, GROUP_COLORS)
 
 
 @st.cache_data(max_entries=1024, show_spinner=False)
@@ -87,9 +88,37 @@ def _exclusive_group_assignment(file_id, index, count):
 
 def render_groups(batch):
     st.subheader('Compare Groups')
-    if batch is None:
-        st.info('Process recordings in Bulk Kinetics first, then assign files here.')
+    upload = st.file_uploader(
+        'Upload previously exported kinetics CSV (optional)', type=['csv'],
+        key='comparison_import_csv',
+        help='Accepts the 16-column PCAP absolute or relative kinetics CSV. '
+             'Importing does not require uploading the original ABF files.'
+    )
+    if upload is not None:
+        basis = st.selectbox(
+            'Imported timestamp basis', ['Auto', 'Absolute', 'Relative'],
+            help='Auto detects relative exports when all AP location values are zero. '
+                 'Override this for unusual recordings.'
+        )
+        try:
+            csv_bytes = upload.getvalue()
+            rows, detected_basis = import_kinetics_csv(csv_bytes, upload.name, basis)
+        except ValueError as err:
+            st.error('Unable to import kinetics CSV: ' + str(err))
+            return
+        # A saved CSV becomes its own stable session dataset; original bulk
+        # selections and file order cannot accidentally affect these groups.
+        signature = ('uploaded-csv', hashlib.sha256(csv_bytes).hexdigest(), basis)
+        batch = {'signature': signature, 'rows': rows}
+        st.success(str(len(rows)) + ' previously analyzed recordings loaded '
+                   + '(' + detected_basis.lower() + ' time coordinates).')
+    elif batch is None:
+        st.info('Upload a previously exported PCAP kinetics CSV here, or process '
+                'recordings in Bulk Kinetics.')
         return
+    else:
+        st.caption('Using the current session\'s Bulk Kinetics results. '
+                   'Upload a saved CSV above to compare a different dataset.')
     rows = batch['rows']
     eligible = [r for r in rows if r['Status'] in ('OK', 'Partial')]
     if len(eligible) < 2:
@@ -140,11 +169,21 @@ def render_groups(batch):
     if st.session_state.get('bulk_comparison') != selection:
         return
     figures, summary = compare_multiple_groups(rows, active)
+    tests = pairwise_statistics(rows, active)
+    st.caption('Two-sided independent-samples Welch t-tests, with Holm correction '
+               'across all displayed metrics and group pairs. p-values are unavailable '
+               'when either group has fewer than two valid observations. '
+               'Use paired or clustered analysis for repeated recordings from the same cell or animal.')
     columns = st.columns(2)
     for i, fig in enumerate(figures):
         with columns[i % 2]:
             st.plotly_chart(fig, width='stretch', key='bulk_box_' + str(i))
     st.dataframe(summary, hide_index=True, width='stretch')
+    st.subheader('Pairwise statistical tests')
+    st.dataframe(tests, hide_index=True, width='stretch')
+    st.download_button('Download statistical tests CSV',
+                       tests.to_csv(index=False, na_rep='').encode('utf-8-sig'),
+                       file_name='group_statistics.csv', mime='text/csv')
     st.download_button('Download group summary CSV',
                        summary.to_csv(index=False, na_rep='').encode('utf-8-sig'),
                        file_name='group_summary.csv', mime='text/csv')

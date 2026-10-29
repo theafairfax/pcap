@@ -69,9 +69,12 @@ class BulkTests(unittest.TestCase):
         self.assertAlmostEqual(row['AP Peak Vm (mV)'],45.)
 
     def test_group_validation_and_measure_specific_missing_values(self):
-        a={'File ID':'a',**{c:1. for c in KINETIC_COLUMNS}}
-        b={'File ID':'b',**{c:2. for c in KINETIC_COLUMNS}}
-        b[KINETIC_COLUMNS[0]]=np.nan
+        with patch('neuron_compare.bulk.load_recording', return_value=self.sweeps()):
+            a = analyze_file(b'file', 'a.abf')
+            b = analyze_file(b'file', 'b.abf')
+        a['File ID'] = 'a'
+        b['File ID'] = 'b'
+        b['AP Onset (ms)'] = np.nan
         figures,summary=compare_groups([a,b],['a'],['b'])
         self.assertEqual(len(figures),len(COMPARISON_COLUMNS))
         first=summary[summary['Measure']==COMPARISON_COLUMNS[0]]
