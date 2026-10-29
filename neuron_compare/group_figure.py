@@ -38,8 +38,12 @@ def combined_boxplots_png(figures, columns=3, dpi=175):
                 color = getattr(getattr(trace, "line", None), "color", None)
                 colors.append(color or "#475569")
         if samples:
-            drawn = ax.boxplot(samples, patch_artist=True, labels=labels,
+            drawn = ax.boxplot(samples, patch_artist=True,
                                showfliers=False, widths=.60)
+            # Set tick labels separately for compatibility with both older
+            # Matplotlib (labels=) and newer Matplotlib (tick_labels=).
+            ax.set_xticks(range(1, len(labels) + 1))
+            ax.set_xticklabels(labels)
             for patch, color in zip(drawn["boxes"], colors):
                 patch.set_facecolor(color)
                 patch.set_alpha(.62)
