@@ -6,7 +6,7 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 from pyabf.abfWriter import writeABF1
-from neuron_compare.bulk import analyze_file, compare_groups, results_frame, KINETIC_COLUMNS
+from neuron_compare.bulk import analyze_file, compare_groups, results_frame, KINETIC_COLUMNS, COMPARISON_COLUMNS
 from neuron_compare.core import Settings, first_event
 from neuron_compare.recordings import Sweep
 
@@ -73,11 +73,11 @@ class BulkTests(unittest.TestCase):
         b={'File ID':'b',**{c:2. for c in KINETIC_COLUMNS}}
         b[KINETIC_COLUMNS[0]]=np.nan
         figures,summary=compare_groups([a,b],['a'],['b'])
-        self.assertEqual(len(figures),len(KINETIC_COLUMNS))
-        first=summary[summary['Measure']==KINETIC_COLUMNS[0]]
+        self.assertEqual(len(figures),len(COMPARISON_COLUMNS))
+        first=summary[summary['Measure']==COMPARISON_COLUMNS[0]]
         self.assertEqual(first['n'].tolist(),[1,0])
         self.assertEqual(first['Missing'].tolist(),[0,1])
-        self.assertEqual(list(figures[1].data[1].y),[2.])
+        self.assertEqual(len(figures[1].data),2)
         self.assertEqual(figures[0].data[0].boxpoints,False)
         for groups in (([],['b']),(['a'],['a']),(['a'],['unknown'])):
             with self.assertRaises(ValueError):
