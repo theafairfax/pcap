@@ -281,3 +281,34 @@ reference collections and uses its own analysis settings.
 
 Changing uploads or bulk settings requires reprocessing. Changing group selections
 requires clicking Analyze again before comparison results are shown.
+
+
+## Concise bulk exports and multi-group comparisons
+
+Bulk Kinetics provides two CSV download buttons after processing recordings:
+**absolute kinetics** (timestamps in sweep-relative milliseconds) and
+**relative kinetics** (landmark timestamps minus that recording's AP peak time).
+Both match the 16-column worksheet format, including sampling rate and sweep,
+and differ only in timestamp origins; rise times, widths and amplitudes remain
+unchanged. AP peak is exactly 0 ms in the relative CSV. Failed or unresolved
+measurements are kept as blank cells rather than fabricated values.
+
+**AHP Half-Fall (ms)** in these concise exports is the **descending** half-depth
+crossing **between AHP onset and AHP trough**, using the midpoint of the AP
+threshold/onset voltage and AHP trough voltage. This corresponds to the
+legacy internal `AHP Half rise (ms)` and does **not** require post-trough
+recovery. The existing full measurement engine still tracks the separate
+upward recovery crossing for historical compatibility. AHP amplitude in the
+concise export is positive hyperpolarization depth
+(`AP threshold voltage - AHP trough voltage`).
+
+Compare Groups now lists analyzed filenames with colored group headings and
+one checkbox per file/group. Assigning a file to a new group unchecks its
+previous group. **Add another group** creates additional selection columns,
+and unassigned files are excluded. Analyze compares all nonempty groups,
+requiring at least two; each file contributes at most one observation.
+**All landmark-time box plots use AP-peak-relative values**. Duration and
+amplitude comparisons retain their physical values; sampling rate, sweep ID
+and the constant relative AP-peak timestamp are not plotted. Missing values
+are excluded per measure, with sample counts displayed per group. The grouped
+kinetics download also uses relative timestamps.
