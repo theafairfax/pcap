@@ -3,7 +3,7 @@ import hashlib
 from dataclasses import asdict
 import streamlit as st
 from .core import Settings
-from .bulk import analyze_file, results_frame, compare_groups
+from .bulk import analyze_file, results_frame, export_frame, compare_multiple_groups, GROUP_COLORS
 
 
 @st.cache_data(max_entries=1024, show_spinner=False)
@@ -60,50 +60,99 @@ def render_bulk():
     frame = results_frame(rows)
     counts = frame['Status'].value_counts()
     st.success(f"{len(rows)} files processed · {counts.get('OK',0)} complete · {counts.get('Partial',0)} partial · {counts.get('No AP',0)} without APs · {counts.get('Error',0)} errors")
-    st.download_button('Download kinetics CSV',frame.to_csv(index=False,na_rep='').encode('utf-8-sig'),
-                       file_name='bulk_kinetics.csv',mime='text/csv',key='bulk_csv')
+    absolute, relative = st.columns(2)
+    absolute.download_button('Download absolute kinetics CSV',
+                             export_frame(rows).to_csv(index=False,na_rep='').encode('utf-8-sig'),
+                             file_name='bulk_kinetics_absolute.csv',mime='text/csv',key='bulk_absolute_csv',width='stretch')
+    relative.download_button('Download relative kinetics CSV',
+                             export_frame(rows,relative=True).to_csv(index=False,na_rep='').encode('utf-8-sig'),
+                             file_name='bulk_kinetics_relative.csv',mime='text/csv',key='bulk_relative_csv',width='stretch')
+    st.caption('Both exports use the 16-column worksheet. Relative timestamps have AP peak = 0 ms. AHP Half-Fall is the descending midpoint crossing before the trough.')
     return saved
+
+
+def _cell_key(file_id, index):
+    return 'comparison_cell_' + hashlib.sha256(
+        (str(file_id) + ':' + str(index)).encode('utf-8')).hexdigest()[:20]
+
+
+def _exclusive_group_assignment(file_id, index, count):
+    """Only one checked group per file; unchecking leaves a file unassigned."""
+    key = _cell_key(file_id, index)
+    if st.session_state.get(key, False):
+        for other in range(count):
+            if other != index:
+                st.session_state[_cell_key(file_id, other)] = False
 
 
 def render_groups(batch):
     st.subheader('Compare Groups')
     if batch is None:
-        st.info('Process recordings in Bulk Kinetics first, then assign files to two groups here.')
+        st.info('Process recordings in Bulk Kinetics first, then assign files here.')
         return
     rows = batch['rows']
-    eligible = [r for r in rows if r['Status'] in ('OK','Partial')]
-    options = [r['File ID'] for r in eligible]
-    labels = {r['File ID']: f"{i+1}. {r['Filename']} · Sweep {r['Sweep']} · {r['Status']}" for i,r in enumerate(eligible)}
-    if len(options)<2:
-        st.info('At least two files with detected APs are needed for a group comparison.')
+    eligible = [r for r in rows if r['Status'] in ('OK', 'Partial')]
+    if len(eligible) < 2:
+        st.info('At least two files with detected APs are needed for group comparison.')
         return
-    for key in ('bulk_group1','bulk_group2'):
-        if key in st.session_state:
-            st.session_state[key] = [v for v in st.session_state[key] if v in options]
-    a,b = st.columns(2)
-    group1 = a.multiselect('Group 1 files',options,format_func=labels.get,key='bulk_group1')
-    group2 = b.multiselect('Group 2 files',options,format_func=labels.get,key='bulk_group2')
-    st.caption('Each file is one observation. Select disjoint groups; unselected files are excluded. Partial files contribute only resolved values. Box plots show boxes and whiskers; n is shown for each measure.')
-    signature = (batch['signature'],tuple(group1),tuple(group2))
-    if st.button('Analyze',key='analyze_groups'):
+    signature = batch['signature']
+    if st.session_state.get('comparison_batch_signature') != signature:
+        st.session_state['comparison_batch_signature'] = signature
+        st.session_state['comparison_group_count'] = 2
+        st.session_state.pop('bulk_comparison', None)
+        for key in list(st.session_state):
+            if key.startswith('comparison_cell_'):
+                del st.session_state[key]
+    count = st.session_state.get('comparison_group_count', 2)
+    if st.button('Add another group', key='add_comparison_group'):
+        count += 1
+        st.session_state['comparison_group_count'] = count
+        st.session_state.pop('bulk_comparison', None)
+    st.caption('Assign each recording using the colored group checkbox beside its filename. A recording can be in only one group; unchecked files are excluded.')
+    headings = st.columns([4] + [1] * count)
+    headings[0].markdown('**Analyzed filename**')
+    for j in range(count):
+        color = GROUP_COLORS[j % len(GROUP_COLORS)]
+        headings[j+1].markdown('<span style="color:' + color + '"><b>Group ' + str(j+1) + '</b></span>', unsafe_allow_html=True)
+    for i, item in enumerate(eligible):
+        cells = st.columns([4] + [1] * count)
+        cells[0].write(str(i+1) + '. ' + str(item['Filename']) + ' · Sweep ' + str(item['Sweep']) + ' · ' + str(item['Status']))
+        for j in range(count):
+            with cells[j+1]:
+                st.checkbox('Group ' + str(j+1) + ' for file ' + str(i+1),
+                            key=_cell_key(item['File ID'], j), label_visibility='collapsed',
+                            on_change=_exclusive_group_assignment,
+                            args=(item['File ID'], j, count))
+    groups = {}
+    for j in range(count):
+        members = [r['File ID'] for r in eligible if st.session_state.get(_cell_key(r['File ID'], j), False)]
+        groups['Group ' + str(j+1)] = members
+    st.caption(' · '.join(name + ': ' + str(len(members)) for name, members in groups.items()))
+    active = {name: ids for name, ids in groups.items() if ids}
+    selection = (signature, tuple((name, tuple(ids)) for name, ids in active.items()))
+    if st.button('Analyze', key='analyze_groups'):
         try:
-            compare_groups(rows,group1,group2)
+            compare_multiple_groups(rows, active)
         except ValueError as err:
             st.warning(str(err))
         else:
-            st.session_state['bulk_comparison'] = signature
-    if st.session_state.get('bulk_comparison') != signature:
+            st.session_state['bulk_comparison'] = selection
+    if st.session_state.get('bulk_comparison') != selection:
         return
-    figures, summary = compare_groups(rows,group1,group2)
+    figures, summary = compare_multiple_groups(rows, active)
     columns = st.columns(2)
-    for i,fig in enumerate(figures):
-        with columns[i%2]:
-            st.plotly_chart(fig,width='stretch',key=f'bulk_box_{i}')
-    st.dataframe(summary,hide_index=True,width='stretch')
-    st.download_button('Download group summary CSV',summary.to_csv(index=False,na_rep='').encode('utf-8-sig'),
-                       file_name='group_summary.csv',mime='text/csv')
-    assigned = results_frame(rows)
-    assigned = assigned[assigned['File ID'].isin(group1+group2)].copy()
-    assigned.insert(2,'Group',assigned['File ID'].map(lambda key: 'Group 1' if key in group1 else 'Group 2'))
-    st.download_button('Download grouped kinetics CSV',assigned.to_csv(index=False,na_rep='').encode('utf-8-sig'),
-                       file_name='grouped_kinetics.csv',mime='text/csv')
+    for i, fig in enumerate(figures):
+        with columns[i % 2]:
+            st.plotly_chart(fig, width='stretch', key='bulk_box_' + str(i))
+    st.dataframe(summary, hide_index=True, width='stretch')
+    st.download_button('Download group summary CSV',
+                       summary.to_csv(index=False, na_rep='').encode('utf-8-sig'),
+                       file_name='group_summary.csv', mime='text/csv')
+    assigned = export_frame(rows, relative=True)
+    full = results_frame(rows)
+    labels = {file_id: name for name, ids in active.items() for file_id in ids}
+    assigned.insert(1, 'Group', full['File ID'].map(labels))
+    assigned = assigned[assigned['Group'].notna()]
+    st.download_button('Download grouped relative kinetics CSV',
+                       assigned.to_csv(index=False, na_rep='').encode('utf-8-sig'),
+                       file_name='grouped_kinetics_relative.csv', mime='text/csv')
