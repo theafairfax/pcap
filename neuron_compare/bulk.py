@@ -40,7 +40,8 @@ def analyze_file(data, filename, channel=0, settings=Settings()):
             return row
         event = first_event(selected, settings)
         r, meta = event['measurements'], event['metadata']
-        row.update({'Sweep': selected.index, 'Sampling Rate (Hz)': float(1. / np.median(np.diff(selected.time))),\n                    'APs in selected sweep': count,
+        row.update({'Sweep': selected.index, 'Sampling Rate (Hz)': float(1. / np.median(np.diff(selected.time))),
+                    'APs in selected sweep': count,
                     'Injection start (ms)': meta['injection_start_ms'],
                     'Injection end (ms)': meta['injection_end_ms'],
                     'Injection window source': meta['window_source'],
