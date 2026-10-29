@@ -312,3 +312,25 @@ amplitude comparisons retain their physical values; sampling rate, sweep ID
 and the constant relative AP-peak timestamp are not plotted. Missing values
 are excluded per measure, with sample counts displayed per group. The grouped
 kinetics download also uses relative timestamps.
+
+
+## Reopen previous bulk results and infer group differences
+
+**Compare Groups** now accepts a prior **absolute** or **relative** PCAP bulk
+kinetics CSV directly, without the original recordings or a current-session
+Bulk Kinetics run. The importer validates the 16 required output columns,
+keeps each CSV row as a separate observation (including duplicated filenames),
+and populates the same checkbox-based, expandable group assignment UI.
+Uploaded CSV data take precedence over current-session bulk results.
+Auto detects a relative CSV when all recorded AP location timestamps are zero;
+the user may choose Absolute or Relative manually if needed.
+
+Every group-comparison box plot uses AP-peak-relative landmark times and
+reports pairwise **two-sided Welch t-test p-values** plus **Holm-adjusted**
+p-values across all available metric/group-pair tests. Pairwise sample counts,
+means, and both p-values can be downloaded as `group_statistics.csv`.
+Tests with fewer than two valid recordings per group or undefined variances
+display N/A. The adjustments control family-wise error across the plotted
+comparisons but do **not** account for repeated recordings of the same
+neuron or animal. Paired or hierarchical designs require a different
+analysis; do not treat repeated measurements as independent biological n.
