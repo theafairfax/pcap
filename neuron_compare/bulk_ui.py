@@ -5,6 +5,8 @@ import streamlit as st
 from .core import Settings
 from .bulk import (analyze_file, results_frame, export_frame, import_kinetics_csv,
                    compare_multiple_groups, pairwise_statistics, GROUP_COLORS)
+from .group_selection_component import group_selection_grid
+from .group_figure import combined_boxplots_png
 
 
 @st.cache_data(max_entries=1024, show_spinner=False)
@@ -129,34 +131,68 @@ def render_groups(batch):
         st.session_state['comparison_batch_signature'] = signature
         st.session_state['comparison_group_count'] = 2
         st.session_state.pop('bulk_comparison', None)
+        st.session_state['comparison_assignments'] = {}
+        st.session_state['comparison_assignment_signature'] = signature
         for key in list(st.session_state):
-            if key.startswith('comparison_cell_'):
+            if key.startswith('comparison_cell_') or key.startswith('comparison_name_'):
                 del st.session_state[key]
     count = st.session_state.get('comparison_group_count', 2)
     if st.button('Add another group', key='add_comparison_group'):
         count += 1
         st.session_state['comparison_group_count'] = count
         st.session_state.pop('bulk_comparison', None)
-    st.caption('Assign each recording using the colored group checkbox beside its filename. A recording can be in only one group; unchecked files are excluded.')
-    headings = st.columns([4] + [1] * count)
-    headings[0].markdown('**Analyzed filename**')
+
+    sort_mode = st.radio('Filename ordering',
+                         ['Upload order', 'Alphanumeric (A–Z)', 'Alphanumeric (Z–A)'],
+                         horizontal=True, key='comparison_sort_order')
+    import re
+    def natural_key(row):
+        return [int(part) if part.isdigit() else part.casefold()
+                for part in re.split(r'(\\d+)', str(row['Filename']))]
+    ordered = list(eligible)
+    if sort_mode != 'Upload order':
+        ordered.sort(key=natural_key, reverse=(sort_mode == 'Alphanumeric (Z–A)'))
+
+    st.markdown('**Group names**')
+    group_columns = st.columns(min(count, 4))
+    group_names = []
     for j in range(count):
-        color = GROUP_COLORS[j % len(GROUP_COLORS)]
-        headings[j+1].markdown('<span style="color:' + color + '"><b>Group ' + str(j+1) + '</b></span>', unsafe_allow_html=True)
-    for i, item in enumerate(eligible):
-        cells = st.columns([4] + [1] * count)
-        cells[0].write(str(i+1) + '. ' + str(item['Filename']) + ' · Sweep ' + str(item['Sweep']) + ' · ' + str(item['Status']))
-        for j in range(count):
-            with cells[j+1]:
-                st.checkbox('Group ' + str(j+1) + ' for file ' + str(i+1),
-                            key=_cell_key(item['File ID'], j), label_visibility='collapsed',
-                            on_change=_exclusive_group_assignment,
-                            args=(item['File ID'], j, count))
-    groups = {}
-    for j in range(count):
-        members = [r['File ID'] for r in eligible if st.session_state.get(_cell_key(r['File ID'], j), False)]
-        groups['Group ' + str(j+1)] = members
-    st.caption(' · '.join(name + ': ' + str(len(members)) for name, members in groups.items()))
+        default = 'Group ' + str(j+1)
+        name = group_columns[j % len(group_columns)].text_input(
+            'Group ' + str(j+1) + ' name',
+            value=default,
+            key='comparison_name_' + str(j))
+        group_names.append(name.strip())
+    if not all(group_names) or len({name.casefold() for name in group_names}) != count:
+        st.warning('Give each group a unique, non-empty name before analyzing.')
+        return
+
+    # Persist assignments independently of UI sort order. Dataset changes reset
+    # these, but changing sort/group labels does not alter a recording's group.
+    assignments_key = 'comparison_assignments'
+    if st.session_state.get('comparison_assignment_signature') != signature:
+        st.session_state['comparison_assignment_signature'] = signature
+        st.session_state[assignments_key] = {}
+    existing = st.session_state.get(assignments_key, {})
+    files = [{'id': str(row['File ID']), 'filename': str(row['Filename']),
+              'sweep': str(row['Sweep']), 'status': str(row['Status'])}
+             for row in ordered]
+    # Changing groups or sort order creates a new component instance but the
+    # assignment mapping is carried over to the replacement instance.
+    group_data = group_selection_grid(
+        files, existing, group_names, sort_mode=sort_mode,
+        key='comparison_group_selector_' + hashlib.sha256(
+            repr((signature, sort_mode, count, tuple(group_names))).encode()).hexdigest()[:12])
+    if isinstance(group_data, dict):
+        existing = {str(k): int(v) for k,v in group_data.items()
+                    if str(k) in {f['id'] for f in files} and isinstance(v, (int, float))}
+        st.session_state[assignments_key] = existing
+    groups = {
+        group_names[j]: [str(row['File ID']) for row in eligible
+                         if existing.get(str(row['File ID']), -1) == j]
+        for j in range(count)
+    }
+    st.caption(' · '.join(name + ': ' + str(len(ids)) for name, ids in groups.items()))
     active = {name: ids for name, ids in groups.items() if ids}
     selection = (signature, tuple((name, tuple(ids)) for name, ids in active.items()))
     if st.button('Analyze', key='analyze_groups'):
@@ -174,6 +210,14 @@ def render_groups(batch):
                'across all displayed metrics and group pairs. p-values are unavailable '
                'when either group has fewer than two valid observations. '
                'Use paired or clustered analysis for repeated recordings from the same cell or animal.')
+    try:
+        png = combined_boxplots_png(figures)
+    except Exception as exc:
+        st.warning('Combined PNG could not be generated: ' + str(exc))
+    else:
+        st.download_button('Download all box plots as PNG', data=png,
+                           file_name='pcap_group_boxplots.png', mime='image/png',
+                           key='download_comparison_master_png')
     columns = st.columns(2)
     for i, fig in enumerate(figures):
         with columns[i % 2]:

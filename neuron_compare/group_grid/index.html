@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<style>
+:root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:light dark}
+body{margin:0;padding:2px 2px 10px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 8px;border-bottom:1px solid #8883;text-align:center}
+th:first-child,td:first-child{text-align:left;width:56%;overflow-wrap:anywhere}
+th{position:sticky;top:0;background:Canvas;z-index:1}
+tbody tr:hover{background:#8882}
+input[type=checkbox]{width:17px;height:17px;cursor:pointer}
+.wrapper{max-height:650px;overflow-y:auto;border:1px solid #8883;border-radius:8px}
+.note{font-size:12px;color:GrayText;margin:5px 2px 10px}
+</style></head><body>
+<div class="note">Shift-click another checkbox in the same group to assign the entire visible range. Click a checked box to remove an assignment.</div>
+<div class="wrapper"><table><thead id="head"></thead><tbody id="body"></tbody></table></div>
+<script>
+(function(){
+  let ids=[],names=[],assignments={},last={},signature="", groups=[];
+  function send(type,extra){window.parent.postMessage(Object.assign({isStreamlitMessage:true,type:type},extra||{}),"*")}
+  function value(){send("streamlit:setComponentValue",{value:Object.assign({},assignments)})}
+  function height(){send("streamlit:setFrameHeight",{height:Math.min(document.body.scrollHeight+8,725)})}
+  function draw(files){
+    const head=document.getElementById("head"),body=document.getElementById("body");
+    head.replaceChildren();body.replaceChildren();
+    const tr=document.createElement("tr"),filename=document.createElement("th");
+    filename.textContent="Analyzed filename";tr.appendChild(filename);
+    groups.forEach((name,g)=>{const th=document.createElement("th");th.textContent=name;th.style.color=["#64748b","#dc645b","#16a085","#8266b0","#d09431","#337db8","#b76591","#7c8a4b"][g%8];tr.appendChild(th)});
+    head.appendChild(tr);
+    files.forEach((file,index)=>{
+      const tr=document.createElement("tr"),first=document.createElement("td");
+      first.textContent=(index+1)+". "+file.filename+" · Sweep "+file.sweep+" · "+file.status;
+      tr.appendChild(first);
+      groups.forEach((name,g)=>{
+        const td=document.createElement("td"),box=document.createElement("input");
+        box.type="checkbox";box.checked=assignments[file.id]===g;
+        box.setAttribute("aria-label",name+" for "+file.filename+" row "+(index+1));
+        box.addEventListener("click",evt=>{
+          const was=assignments[file.id]===g;
+          if(evt.shiftKey && last[g]!==undefined){
+            const lo=Math.min(index,last[g]),hi=Math.max(index,last[g]);
+            for(let k=lo;k<=hi;k++)assignments[files[k].id]=g;
+          }else{
+            assignments[file.id]=was?-1:g;
+          }
+          last[g]=index;
+          body.querySelectorAll("tr").forEach((row,r)=>{
+            row.querySelectorAll("input").forEach((el,j)=>el.checked=assignments[files[r].id]===j);
+          });
+          value();
+        });
+        td.appendChild(box);tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+    height();
+  }
+  window.addEventListener("message",evt=>{
+    if(evt.data?.type!=="streamlit:render")return;
+    const args=evt.data.args||{}, files=args.files||[];
+    const incomingSignature=JSON.stringify([files.map(f=>f.id),args.groups]);
+    if(signature!==incomingSignature){
+      signature=incomingSignature;
+      const current=args.assignments||{};
+      const old=assignments;
+      assignments={};
+      files.forEach(f=>{
+        const v=Object.prototype.hasOwnProperty.call(old,f.id)?old[f.id]:current[f.id];
+        assignments[f.id]=Number.isInteger(v)&&v<(args.groups||[]).length?v:-1;
+      });
+      last={};
+    }
+    groups=args.groups||[];
+    draw(files);
+  });
+  send("streamlit:componentReady",{apiVersion:1});
+  height();
+})();
+</script></body></html>

@@ -334,3 +334,27 @@ display N/A. The adjustments control family-wise error across the plotted
 comparisons but do **not** account for repeated recordings of the same
 neuron or animal. Paired or hierarchical designs require a different
 analysis; do not treat repeated measurements as independent biological n.
+
+
+## Compare Groups: fast assignment and consolidated figures
+
+The group assignment grid supports **Shift-click range assignment**: click a
+checkbox in a group, then hold Shift and click a second checkbox in the same
+group to assign all files between those two rows (inclusive). The visible row
+ordering determines the range. Each file belongs to at most one group;
+click an already selected checkbox to unassign it.
+
+Choose **Upload order**, **Alphanumeric (A–Z)**, or **Alphanumeric (Z–A)**
+to change the row order. Alphanumeric sort is natural, so a filename ending
+in `2` precedes one ending in `10`. Assignments follow stable file IDs
+when order changes, not row positions.
+
+Edit the **Group names** fields to label conditions such as `Control` and
+`Nifedipine`. These names appear in per-metric Plotly legends, pairwise
+p-value labels, statistical output, and grouped CSV downloads. Names must
+be unique and non-empty.
+
+After **Analyze**, select **Download all box plots as PNG** to save a single
+high-resolution contact sheet containing all comparisons, group colors,
+and p-value labels. This export uses Matplotlib on the server; unlike Plotly
+image export it does not require Kaleido or a headless Chrome installation.
