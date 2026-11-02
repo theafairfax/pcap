@@ -48,6 +48,12 @@ def combined_boxplots_png(figures, columns=3, dpi=175):
                 patch.set_facecolor(color)
                 patch.set_alpha(.62)
                 patch.set_edgecolor(color)
+            # Reproduce individual observations in the exported overview.
+            for position, (sample, color) in enumerate(zip(samples, colors), start=1):
+                rng = np.random.default_rng(2026 + index * 101 + position)
+                jitter = rng.uniform(-.15, .15, len(sample))
+                ax.scatter(position + jitter, sample, s=12, color=color,
+                           alpha=.85, edgecolors="white", linewidths=.25, zorder=4)
             for median in drawn["medians"]:
                 median.set_color("#222222")
             ax.tick_params(axis="x", labelrotation=18, labelsize=8)
@@ -60,7 +66,21 @@ def combined_boxplots_png(figures, columns=3, dpi=175):
         ax.set_title(title, fontsize=11, fontweight="bold", loc="left", pad=9)
         ax.set_ylabel(_plain_text(source.layout.yaxis.title.text), fontsize=8)
         ax.grid(axis="y", alpha=.2)
-        annotations = source.layout.annotations or []
+        # Bracket coordinates are stored as Plotly path shapes using data axes.
+        for shape in source.layout.shapes or []:
+            if shape.type == "path" and shape.path:
+                coords = re.findall(r"[ML]\\s*([-+\\d.eE]+)\\s+([-+\\d.eE]+)", shape.path)
+                if coords:
+                    x, y = zip(*[(float(a) + 1, float(b)) for a, b in coords])
+                    ax.plot(x, y, color="#334155", lw=1.15, zorder=5)
+        for ann in source.layout.annotations or []:
+            if ann.yref == "y":
+                ax.text(float(ann.x) + 1, float(ann.y), _plain_text(ann.text),
+                        ha="center", va="bottom", fontsize=9, fontweight="bold")
+        yrange = source.layout.yaxis.range
+        if yrange is not None and len(yrange) == 2:
+            ax.set_ylim(float(yrange[0]), float(yrange[1]))
+        annotations = [ann for ann in source.layout.annotations or [] if ann.yref == "paper"]
         if annotations:
             p_text = "\n".join(_plain_text(ann.text).replace("  ", " ").strip()
                                for ann in annotations)

@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 from neuron_compare.bulk import (
     COLUMNS, export_frame, import_kinetics_csv, compare_multiple_groups,
-    pairwise_statistics, COMPARISON_COLUMNS, EXPORT_COLUMNS,
+    pairwise_statistics, COMPARISON_COLUMNS, EXPORT_COLUMNS, significance_label,
 )
 
 
@@ -56,6 +56,23 @@ class SavedResultsTests(unittest.TestCase):
         self.assertEqual(len(tests), len(COMPARISON_COLUMNS))
         self.assertTrue((tests['Holm-adjusted p-value'].dropna() >=
                          tests['Welch p-value'].dropna()).all())
+
+    def test_significance_thresholds_and_brackets(self):
+        self.assertEqual(significance_label(.05), 'n.s.')
+        self.assertEqual(significance_label(.0499), '*')
+        self.assertEqual(significance_label(.0099), '**')
+        self.assertEqual(significance_label(.0009), '***')
+        self.assertEqual(significance_label(np.nan), 'N/A')
+        records = [make_row(i) for i in range(9)]
+        for i, record in enumerate(records):
+            record['AP Half width (ms)'] = float(i) / 5
+        groups = {f'Group {i+1}': [f'file{3*i+j}' for j in range(3)] for i in range(3)}
+        figures, _ = compare_multiple_groups(records, groups)
+        fig = next(f for f in figures if f.layout.yaxis.title.text == 'AP Half width (ms)')
+        self.assertTrue(all(trace.boxpoints == 'all' for trace in fig.data))
+        self.assertEqual(len(fig.layout.shapes), 3)
+        self.assertEqual(len([a for a in fig.layout.annotations if a.yref == 'y']), 3)
+        self.assertGreater(fig.layout.yaxis.range[1], max(r['AP Half width (ms)'] for r in records))
 
     def test_missing_and_duplicate_filenames(self):
         record = make_row(0)
