@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 import plotly.graph_objects as go
 
-from neuron_compare.group_figure import combined_boxplots_png
+from neuron_compare.group_figure import combined_boxplots_png, combined_boxplots_pdf
 
 
 class GroupFigureTests(unittest.TestCase):
@@ -24,6 +24,9 @@ class GroupFigureTests(unittest.TestCase):
         png = combined_boxplots_png(figures, columns=2, dpi=90)
         self.assertTrue(png.startswith(b'\x89PNG\r\n\x1a\n'))
         self.assertGreater(len(png), 10000)
+        pdf = combined_boxplots_pdf(figures, columns=2)
+        self.assertTrue(pdf.startswith(b'%PDF-'))
+        self.assertGreater(len(pdf), 1000)
 
     def test_no_figures(self):
         with self.assertRaises(ValueError):
