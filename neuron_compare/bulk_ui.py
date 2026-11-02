@@ -218,8 +218,14 @@ def render_groups(batch):
                'Corrections cover all displayed metrics and group pairs. p-values are unavailable '
                'when either group has fewer than two valid observations. '
                'Use paired or clustered analysis for repeated recordings from the same cell or animal.')
+    export_title = st.text_input(
+        'Combined figure title (PNG/PDF)',
+        value='', key='comparison_combined_title',
+        placeholder='e.g., Effects of Nifedipine on AP/AHP Kinetics',
+        help='Centered at the top of both combined exports. Leave blank for no title.'
+    ).strip()
     try:
-        png = combined_boxplots_png(figures)
+        png = combined_boxplots_png(figures, title=export_title)
     except Exception as exc:
         st.warning('Combined PNG could not be generated: ' + str(exc))
     else:
@@ -227,7 +233,7 @@ def render_groups(batch):
                            file_name='pcap_group_boxplots.png', mime='image/png',
                            key='download_comparison_master_png')
     try:
-        pdf = combined_boxplots_pdf(figures)
+        pdf = combined_boxplots_pdf(figures, title=export_title)
     except Exception as exc:
         st.warning('Combined PDF could not be generated: ' + str(exc))
     else:
