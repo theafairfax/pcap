@@ -246,6 +246,55 @@ def pairwise_statistics(rows, groups):
     return pd.DataFrame(tests)
 
 
+def significance_label(p):
+    """Publication-style stars based on the Holm-adjusted p-value."""
+    if not np.isfinite(p):
+        return 'N/A'
+    if p < .001:
+        return '***'
+    if p < .01:
+        return '**'
+    if p < .05:
+        return '*'
+    return 'n.s.'
+
+
+def comparison_brackets(fig, relevant, group_names, values):
+    """Add pairwise Plotly brackets above the highest finite observations."""
+    if not values or not any(len(a) for a in values):
+        return
+    finite = np.concatenate([a for a in values if len(a)])
+    low, high = float(finite.min()), float(finite.max())
+    span = high - low
+    step = span * .12 if span > 0 else max(abs(high) * .12, 1.)
+    base = high + step * .55
+    names = {name: i for i, name in enumerate(group_names)}
+    pairs = []
+    for _, result in relevant.iterrows():
+        left, right = sorted((names[result['Group A']], names[result['Group B']]))
+        pairs.append((right - left, left, right, result))
+    # Draw short connections first, keeping longer spanning comparisons higher.
+    pairs.sort(key=lambda p: (p[0], p[1], p[2]))
+    levels = []
+    for _, left, right, result in pairs:
+        level = 0
+        while level < len(levels) and any(not (right < a or left > b) for a, b in levels[level]):
+            level += 1
+        if level == len(levels):
+            levels.append([])
+        levels[level].append((left, right))
+        y = base + step * 1.15 * level
+        tick = step * .25
+        fig.add_shape(type='path', xref='x', yref='y',
+                      path=f'M {left} {y-tick} L {left} {y} L {right} {y} L {right} {y-tick}',
+                      line=dict(color='#334155', width=1.25))
+        fig.add_annotation(x=(left + right) / 2, y=y + step * .12,
+                           xref='x', yref='y', text=significance_label(result['Holm-adjusted p-value']),
+                           showarrow=False, yanchor='bottom', font=dict(size=12, color='#111827'))
+    ceiling = base + step * (1.15 * max(0, len(levels) - 1) + .9)
+    fig.update_yaxes(range=[low - step * .55, ceiling])
+
+
 def compare_multiple_groups(rows, groups):
     """Compare disjoint groups using relative landmarks and unchanged kinetics.
 
@@ -267,13 +316,16 @@ def compare_multiple_groups(rows, groups):
     for measure in COMPARISON_COLUMNS:
         fig = go.Figure()
         subtitle = []
+        measurements = []
         for n, (name, ids) in enumerate(groups.items()):
             numeric = pd.to_numeric(rel.loc[ids, measure], errors='coerce')
             valid = numeric[np.isfinite(numeric)]
+            measurements.append(valid.to_numpy(dtype=float))
             subtitle.append(f'{name} n={len(valid)}')
             color = GROUP_COLORS[n % len(GROUP_COLORS)]
-            fig.add_trace(go.Box(y=valid.tolist(), name=name, boxpoints=False,
-                                 line=dict(color=color), fillcolor=color, opacity=.65))
+            fig.add_trace(go.Box(y=valid.tolist(), name=name, boxpoints='all', jitter=.32,
+                                 pointpos=0, marker=dict(color=color, size=5, opacity=.88),
+                                 line=dict(color=color), fillcolor=color, opacity=.70))
             summary.append({
                 'Measure': measure, 'Group': name, 'n': len(valid),
                 'Missing': len(ids) - len(valid),
@@ -288,6 +340,7 @@ def compare_multiple_groups(rows, groups):
             f"Holm={p_label(r['Holm-adjusted p-value'])}"
             for _, r in relevant.iterrows()
         ]
+        comparison_brackets(fig, relevant, list(groups), measurements)
         fig.update_layout(title=f"{measure}<br><sup>{' · '.join(subtitle)}</sup>",
                           yaxis_title=measure, template='plotly_white',
                           height=360 + 19 * max(0, len(comparisons)-1),
