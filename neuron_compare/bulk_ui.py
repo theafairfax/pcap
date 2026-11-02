@@ -4,9 +4,9 @@ from dataclasses import asdict
 import streamlit as st
 from .core import Settings
 from .bulk import (analyze_file, results_frame, export_frame, import_kinetics_csv,
-                   compare_multiple_groups, pairwise_statistics, GROUP_COLORS)
+                   compare_multiple_groups, pairwise_statistics, GROUP_COLORS, SIGNIFICANCE_METHODS)
 from .group_selection_component import group_selection_grid
-from .group_figure import combined_boxplots_png
+from .group_figure import combined_boxplots_png, combined_boxplots_pdf
 
 
 @st.cache_data(max_entries=1024, show_spinner=False)
@@ -194,20 +194,28 @@ def render_groups(batch):
     }
     st.caption(' · '.join(name + ': ' + str(len(ids)) for name, ids in groups.items()))
     active = {name: ids for name, ids in groups.items() if ids}
-    selection = (signature, tuple((name, tuple(ids)) for name, ids in active.items()))
+    significance_method = st.radio(
+        'Significance method for plot brackets and asterisks',
+        list(SIGNIFICANCE_METHODS), index=2, horizontal=True,
+        key='comparison_significance_method',
+        help='The selected method controls only the bracket labels. Every plot and statistical export reports all three p-values.'
+    )
+    selection = (signature, tuple((name, tuple(ids)) for name, ids in active.items()),
+                 significance_method)
     if st.button('Analyze', key='analyze_groups'):
         try:
-            compare_multiple_groups(rows, active)
+            compare_multiple_groups(rows, active, significance_method=significance_method)
         except ValueError as err:
             st.warning(str(err))
         else:
             st.session_state['bulk_comparison'] = selection
     if st.session_state.get('bulk_comparison') != selection:
         return
-    figures, summary = compare_multiple_groups(rows, active)
+    figures, summary = compare_multiple_groups(rows, active, significance_method=significance_method)
     tests = pairwise_statistics(rows, active)
-    st.caption('Two-sided independent-samples Welch t-tests, with Holm correction '
-               'across all displayed metrics and group pairs. p-values are unavailable '
+    st.caption('Bracket asterisks use ' + significance_method +
+               '. Each plot lists raw Welch, Benjamini-Hochberg FDR, and Holm-Bonferroni p-values (in that order). '
+               'Corrections cover all displayed metrics and group pairs. p-values are unavailable '
                'when either group has fewer than two valid observations. '
                'Use paired or clustered analysis for repeated recordings from the same cell or animal.')
     try:
@@ -218,6 +226,14 @@ def render_groups(batch):
         st.download_button('Download all box plots as PNG', data=png,
                            file_name='pcap_group_boxplots.png', mime='image/png',
                            key='download_comparison_master_png')
+    try:
+        pdf = combined_boxplots_pdf(figures)
+    except Exception as exc:
+        st.warning('Combined PDF could not be generated: ' + str(exc))
+    else:
+        st.download_button('Download all box plots as PDF', data=pdf,
+                           file_name='pcap_group_boxplots.pdf', mime='application/pdf',
+                           key='download_comparison_master_pdf')
     columns = st.columns(2)
     for i, fig in enumerate(figures):
         with columns[i % 2]:

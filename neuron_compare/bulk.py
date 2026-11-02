@@ -213,6 +213,36 @@ def _holm_adjust(pvalues):
     return out
 
 
+def _bh_adjust(pvalues):
+    """Benjamini-Hochberg correction across all finite hypothesis tests."""
+    out = [np.nan] * len(pvalues)
+    indices = sorted((i for i, p in enumerate(pvalues) if np.isfinite(p)), key=lambda i: pvalues[i])
+    minimum = 1.
+    for rank in range(len(indices) - 1, -1, -1):
+        index = indices[rank]
+        minimum = min(minimum, float(pvalues[index]) * len(indices) / (rank + 1))
+        out[index] = minimum
+    return out
+
+
+SIGNIFICANCE_METHODS = {
+    "Welch's t-test (uncorrected)": 'Welch p-value',
+    'Benjamini-Hochberg (FDR)': 'BH-adjusted p-value',
+    'Holm-Bonferroni': 'Holm-adjusted p-value',
+}
+
+
+def _p_text(value):
+    return 'N/A' if not np.isfinite(value) else ('<0.001' if value < .001 else f'{value:.3f}')
+
+
+def _comparison_caption(row):
+    return (f"{row['Group A']} vs {row['Group B']}: "
+            f"Welch p={_p_text(row['Welch p-value'])}; "
+            f"BH FDR p={_p_text(row['BH-adjusted p-value'])}; "
+            f"Holm p={_p_text(row['Holm-adjusted p-value'])}")
+
+
 def pairwise_statistics(rows, groups):
     """Welch independent-samples tests; family-wide Holm-adjusted p-values."""
     from itertools import combinations
@@ -241,8 +271,10 @@ def pairwise_statistics(rows, groups):
                 'Welch p-value': p,
             })
     adjusted = _holm_adjust([entry['Welch p-value'] for entry in tests])
-    for entry, p in zip(tests, adjusted):
+    bh_adjusted = _bh_adjust([entry['Welch p-value'] for entry in tests])
+    for entry, p, bh in zip(tests, adjusted, bh_adjusted):
         entry['Holm-adjusted p-value'] = p
+        entry['BH-adjusted p-value'] = bh
     return pd.DataFrame(tests)
 
 
@@ -259,7 +291,7 @@ def significance_label(p):
     return 'n.s.'
 
 
-def comparison_brackets(fig, relevant, group_names, values):
+def comparison_brackets(fig, relevant, group_names, values, significance_column='Holm-adjusted p-value'):
     """Add pairwise Plotly brackets above the highest finite observations."""
     if not values or not any(len(a) for a in values):
         return
@@ -289,17 +321,20 @@ def comparison_brackets(fig, relevant, group_names, values):
                       path=f'M {left} {y-tick} L {left} {y} L {right} {y} L {right} {y-tick}',
                       line=dict(color='#334155', width=1.25))
         fig.add_annotation(x=(left + right) / 2, y=y + step * .12,
-                           xref='x', yref='y', text=significance_label(result['Holm-adjusted p-value']),
+                           xref='x', yref='y', text=significance_label(result[significance_column]),
                            showarrow=False, yanchor='bottom', font=dict(size=12, color='#111827'))
     ceiling = base + step * (1.15 * max(0, len(levels) - 1) + .9)
     fig.update_yaxes(range=[low - step * .55, ceiling])
 
 
-def compare_multiple_groups(rows, groups):
+def compare_multiple_groups(rows, groups, significance_method='Holm-Bonferroni'):
     """Compare disjoint groups using relative landmarks and unchanged kinetics.
 
     `groups` maps display names to collections of stable File IDs.
     """
+    if significance_method not in SIGNIFICANCE_METHODS:
+        raise ValueError('Unknown significance correction: ' + str(significance_method))
+    significance_column = SIGNIFICANCE_METHODS[significance_method]
     groups = {str(name): list(ids) for name, ids in groups.items()}
     if len(groups) < 2 or any(not ids for ids in groups.values()):
         raise ValueError('Assign at least one file to each of two or more groups.')
@@ -333,21 +368,16 @@ def compare_multiple_groups(rows, groups):
                 'SD': valid.std(ddof=1),
             })
         relevant = tests.loc[tests['Measure'].eq(measure)]
-        def p_label(value):
-            return 'N/A' if not np.isfinite(value) else ('<0.001' if value < .001 else f'{value:.3f}')
-        comparisons = [
-            f"{r['Group A']} vs {r['Group B']}: p={p_label(r['Welch p-value'])}, "
-            f"Holm={p_label(r['Holm-adjusted p-value'])}"
-            for _, r in relevant.iterrows()
-        ]
-        comparison_brackets(fig, relevant, list(groups), measurements)
+        comparisons = [_comparison_caption(r) for _, r in relevant.iterrows()]
+        comparison_brackets(fig, relevant, list(groups), measurements,
+                            significance_column=significance_column)
         fig.update_layout(title=f"{measure}<br><sup>{' · '.join(subtitle)}</sup>",
                           yaxis_title=measure, template='plotly_white',
-                          height=360 + 19 * max(0, len(comparisons)-1),
-                          margin=dict(l=20, r=20, t=75 + 19 * len(comparisons), b=45))
-        fig.add_annotation(x=.5, y=1.09, xref='paper', yref='paper',
+                          height=390 + 22 * max(0, len(comparisons)-1),
+                          margin=dict(l=20, r=20, t=75, b=100 + 19 * max(0, len(comparisons)-1)))
+        fig.add_annotation(x=.5, y=-.22, xref='paper', yref='paper',
                            text='<br>'.join(comparisons), showarrow=False,
-                           xanchor='center', yanchor='bottom',
+                           xanchor='center', yanchor='top',
                            font=dict(size=10))
         figures.append(fig)
     return figures, pd.DataFrame(summary)
