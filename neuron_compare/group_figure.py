@@ -12,7 +12,7 @@ def _plain_text(value):
     return re.sub(r"<[^>]+>", " ", str(value or "")).replace("&lt;", "<").replace("&gt;", ">").strip()
 
 
-def _draw_combined_boxplots(figures, columns=3):
+def _draw_combined_boxplots(figures, columns=3, title=''):
     """Recreate the group boxes as an overview figure, preserving all p-values.
 
     The input figures already encode relative coordinates, names, colors and
@@ -22,8 +22,16 @@ def _draw_combined_boxplots(figures, columns=3):
         raise ValueError("No comparison plots to export.")
     cols = min(max(1, int(columns)), len(figures))
     rows = math.ceil(len(figures) / cols)
-    fig, axes = plt.subplots(rows, cols, figsize=(7.0 * cols, 5.8 * rows),
-                             squeeze=False, layout="constrained")
+    fig, axes = plt.subplots(rows, cols, figsize=(7.0 * cols, 6.1 * rows),
+                             squeeze=False)
+    fig.subplots_adjust(left=.07, right=.98, bottom=.07, top=.87 if title else .91,
+                        wspace=.32, hspace=.72)
+    if title:
+        fig.suptitle(str(title).strip(), fontsize=19, fontweight="bold", x=.5,
+                     y=.985, ha="center", wrap=True)
+    fig.text(.5, .923 if title else .965,
+             "Time-based kinetic measurements (ms) are relative to the AP peak (t = 0 ms).",
+             ha="center", va="top", fontsize=11, color="#475569")
     for index, source in enumerate(figures):
         ax = axes.flat[index]
         samples = []
@@ -44,6 +52,10 @@ def _draw_combined_boxplots(figures, columns=3):
             # Matplotlib (labels=) and newer Matplotlib (tick_labels=).
             ax.set_xticks(range(1, len(labels) + 1))
             ax.set_xticklabels(labels)
+            # Count only finite values actually displayed for each metric.
+            for position, sample in enumerate(samples, start=1):
+                ax.text(position, -.13, f"n={len(sample)}", ha="center", va="top",
+                        transform=ax.get_xaxis_transform(), fontsize=10, color="#334155")
             for patch, color in zip(drawn["boxes"], colors):
                 patch.set_facecolor(color)
                 patch.set_alpha(.62)
@@ -84,15 +96,15 @@ def _draw_combined_boxplots(figures, columns=3):
         if annotations:
             p_text = "\n".join(_plain_text(ann.text).replace("  ", " ").strip()
                                for ann in annotations)
-            ax.text(.01, -.32, p_text, transform=ax.transAxes, fontsize=7,
-                    va="top", ha="left", clip_on=False)
+            ax.text(.5, -.23, p_text, transform=ax.transAxes, fontsize=9,
+                    color="#64748b", va="top", ha="center", clip_on=False)
     for ax in list(axes.flat)[len(figures):]:
         ax.set_visible(False)
     return fig
 
 
-def _combined_export(figures, fmt, columns=3, dpi=175):
-    fig = _draw_combined_boxplots(figures, columns=columns)
+def _combined_export(figures, fmt, columns=3, dpi=175, title=""):
+    fig = _draw_combined_boxplots(figures, columns=columns, title=title)
     buffer = BytesIO()
     try:
         fig.savefig(buffer, format=fmt, dpi=dpi, bbox_inches="tight",
@@ -102,12 +114,12 @@ def _combined_export(figures, fmt, columns=3, dpi=175):
         plt.close(fig)
 
 
-def combined_boxplots_png(figures, columns=3, dpi=175):
+def combined_boxplots_png(figures, columns=3, dpi=175, title=""):
     """Export a raster master figure with significance brackets and all p-values."""
-    return _combined_export(figures, "png", columns=columns, dpi=dpi)
+    return _combined_export(figures, "png", columns=columns, dpi=dpi, title=title)
 
 
-def combined_boxplots_pdf(figures, columns=3):
+def combined_boxplots_pdf(figures, columns=3, title=""):
     """Export the same combined subplots as a vector PDF."""
-    return _combined_export(figures, "pdf", columns=columns)
+    return _combined_export(figures, "pdf", columns=columns, title=title)
 
