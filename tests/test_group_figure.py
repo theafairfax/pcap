@@ -4,7 +4,9 @@ import unittest
 import numpy as np
 import plotly.graph_objects as go
 
-from neuron_compare.group_figure import combined_boxplots_png, combined_boxplots_pdf
+from neuron_compare.group_figure import (combined_boxplots_png, combined_boxplots_pdf,
+                                         _draw_combined_boxplots)
+from matplotlib import pyplot as plt
 
 
 class GroupFigureTests(unittest.TestCase):
@@ -27,6 +29,30 @@ class GroupFigureTests(unittest.TestCase):
         pdf = combined_boxplots_pdf(figures, columns=2)
         self.assertTrue(pdf.startswith(b'%PDF-'))
         self.assertGreater(len(pdf), 1000)
+
+    def test_export_title_description_counts_and_stat_placement(self):
+        fig = go.Figure()
+        fig.add_trace(go.Box(name='Control', y=[1., 2., np.nan]))
+        fig.add_trace(go.Box(name='Drug', y=[3., 4., 5.]))
+        fig.update_layout(title='AP amplitude (mV)', yaxis_title='AP amplitude (mV)')
+        fig.add_annotation(x=.5, y=-.22, xref='paper', yref='paper',
+                           text='Control vs Drug: Welch p=0.01; BH FDR p=0.02; Holm p=0.03')
+        combined = _draw_combined_boxplots([fig], title='Nifedipine experiment')
+        try:
+            self.assertEqual(combined._suptitle.get_text(), 'Nifedipine experiment')
+            self.assertTrue(any('t = 0 ms' in t.get_text() for t in combined.texts))
+            axis = combined.axes[0]
+            self.assertIn('n=2', [t.get_text() for t in axis.texts])
+            self.assertIn('n=3', [t.get_text() for t in axis.texts])
+            summary = next(t for t in axis.texts if 'Welch p=' in t.get_text())
+            self.assertEqual(summary.get_ha(), 'center')
+            self.assertGreaterEqual(summary.get_fontsize(), 9)
+        finally:
+            plt.close(combined)
+        png = combined_boxplots_png([fig], title='Nifedipine experiment', dpi=90)
+        pdf = combined_boxplots_pdf([fig], title='Nifedipine experiment')
+        self.assertTrue(png.startswith(b'\\x89PNG'))
+        self.assertTrue(pdf.startswith(b'%PDF-'))
 
     def test_no_figures(self):
         with self.assertRaises(ValueError):
