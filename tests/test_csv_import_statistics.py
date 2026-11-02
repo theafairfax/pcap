@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 from neuron_compare.bulk import (
     COLUMNS, export_frame, import_kinetics_csv, compare_multiple_groups,
-    pairwise_statistics, COMPARISON_COLUMNS, EXPORT_COLUMNS, significance_label,
+    pairwise_statistics, COMPARISON_COLUMNS, EXPORT_COLUMNS, significance_label, _bh_adjust,
 )
 
 
@@ -50,12 +50,48 @@ class SavedResultsTests(unittest.TestCase):
                   'Group 2': ['file3', 'file4', 'file5']}
         figures, summary = compare_multiple_groups(records, groups)
         self.assertEqual(len(figures), len(COMPARISON_COLUMNS))
-        self.assertIn('p=', figures[0].layout.annotations[0].text)
-        self.assertIn('Holm=', figures[0].layout.annotations[0].text)
+        self.assertIn('Welch p=', figures[0].layout.annotations[0].text)
+        self.assertIn('BH FDR p=', figures[0].layout.annotations[0].text)
+        self.assertIn('Holm p=', figures[0].layout.annotations[0].text)
         tests = pairwise_statistics(records, groups)
         self.assertEqual(len(tests), len(COMPARISON_COLUMNS))
         self.assertTrue((tests['Holm-adjusted p-value'].dropna() >=
                          tests['Welch p-value'].dropna()).all())
+
+    def test_bh_stepup_and_invalid_pvalues(self):
+        p = _bh_adjust([.04, .001, np.nan, .02, .008, .12])
+        np.testing.assert_allclose(
+            [p[i] for i in (0, 1, 3, 4, 5)],
+            [.05, .005, 1/30, .02, .12],
+            rtol=1e-10,
+        )
+        self.assertTrue(np.isnan(p[2]))
+
+    def test_method_controls_brackets_not_numeric_results(self):
+        records = [make_row(i) for i in range(6)]
+        for i, record in enumerate(records):
+            record['AP Half width (ms)'] = .1 * (i % 3) + (1. if i >= 3 else 0.)
+        groups = {'Control': ['file0', 'file1', 'file2'],
+                  'Drug': ['file3', 'file4', 'file5']}
+        test = pairwise_statistics(records, groups)
+        self.assertIn('BH-adjusted p-value', test.columns)
+        values = []
+        for method, column in (
+            ("Welch's t-test (uncorrected)", 'Welch p-value'),
+            ('Benjamini-Hochberg (FDR)', 'BH-adjusted p-value'),
+            ('Holm-Bonferroni', 'Holm-adjusted p-value'),
+        ):
+            figures, _ = compare_multiple_groups(records, groups, significance_method=method)
+            fig = next(f for f in figures if f.layout.yaxis.title.text == 'AP Half width (ms)')
+            self.assertIn('Welch p=', fig.layout.annotations[0].text)
+            self.assertIn('BH FDR p=', fig.layout.annotations[0].text)
+            self.assertIn('Holm p=', fig.layout.annotations[0].text)
+            relevant = test.loc[test['Measure'].eq('AP Half width (ms)')].iloc[0]
+            self.assertEqual(fig.layout.annotations[1].text, significance_label(relevant[column]))
+            values.append(fig.layout.annotations[0].text)
+        self.assertEqual(len(set(values)), 1)
+        with self.assertRaisesRegex(ValueError, 'Unknown significance'):
+            compare_multiple_groups(records, groups, significance_method='invalid')
 
     def test_significance_thresholds_and_brackets(self):
         self.assertEqual(significance_label(.05), 'n.s.')
