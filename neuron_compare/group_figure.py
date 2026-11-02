@@ -1,4 +1,4 @@
-"""Export all Plotly comparison boxes into a single PNG without Chromium/Kaleido."""
+"""Export Plotly group comparisons to combined PNG/PDF using Matplotlib."""
 from io import BytesIO
 import math
 import re
@@ -12,8 +12,8 @@ def _plain_text(value):
     return re.sub(r"<[^>]+>", " ", str(value or "")).replace("&lt;", "<").replace("&gt;", ">").strip()
 
 
-def combined_boxplots_png(figures, columns=3, dpi=175):
-    """Recreate the group boxes as an overview image, preserving p-value labels.
+def _draw_combined_boxplots(figures, columns=3):
+    """Recreate the group boxes as an overview figure, preserving all p-values.
 
     The input figures already encode relative coordinates, names, colors and
     Welch/Holm comparisons. No reanalysis is done for the export.
@@ -22,7 +22,7 @@ def combined_boxplots_png(figures, columns=3, dpi=175):
         raise ValueError("No comparison plots to export.")
     cols = min(max(1, int(columns)), len(figures))
     rows = math.ceil(len(figures) / cols)
-    fig, axes = plt.subplots(rows, cols, figsize=(6.0 * cols, 4.6 * rows),
+    fig, axes = plt.subplots(rows, cols, figsize=(7.0 * cols, 5.8 * rows),
                              squeeze=False, layout="constrained")
     for index, source in enumerate(figures):
         ax = axes.flat[index]
@@ -84,12 +84,30 @@ def combined_boxplots_png(figures, columns=3, dpi=175):
         if annotations:
             p_text = "\n".join(_plain_text(ann.text).replace("  ", " ").strip()
                                for ann in annotations)
-            ax.text(.01, -.23, p_text, transform=ax.transAxes, fontsize=7,
+            ax.text(.01, -.32, p_text, transform=ax.transAxes, fontsize=7,
                     va="top", ha="left", clip_on=False)
     for ax in list(axes.flat)[len(figures):]:
         ax.set_visible(False)
+    return fig
+
+
+def _combined_export(figures, fmt, columns=3, dpi=175):
+    fig = _draw_combined_boxplots(figures, columns=columns)
     buffer = BytesIO()
-    fig.savefig(buffer, format="png", dpi=dpi, bbox_inches="tight",
-                facecolor="white", pad_inches=.25)
-    plt.close(fig)
-    return buffer.getvalue()
+    try:
+        fig.savefig(buffer, format=fmt, dpi=dpi, bbox_inches="tight",
+                    facecolor="white", pad_inches=.4)
+        return buffer.getvalue()
+    finally:
+        plt.close(fig)
+
+
+def combined_boxplots_png(figures, columns=3, dpi=175):
+    """Export a raster master figure with significance brackets and all p-values."""
+    return _combined_export(figures, "png", columns=columns, dpi=dpi)
+
+
+def combined_boxplots_pdf(figures, columns=3):
+    """Export the same combined subplots as a vector PDF."""
+    return _combined_export(figures, "pdf", columns=columns)
+
