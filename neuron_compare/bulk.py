@@ -93,7 +93,7 @@ GROUP_COLORS = ('#475569', '#dc645b', '#16a085', '#8266b0', '#d09431',
                 '#337db8', '#b76591', '#7c8a4b')
 
 
-def export_frame(rows, relative=False):
+def export_frame(rows, relative=False, include_groups=False):
     """Build a concise export without modifying the underlying analysis rows."""
     frame = results_frame(rows)
     out = pd.DataFrame(index=frame.index)
@@ -125,7 +125,11 @@ def export_frame(rows, relative=False):
         peak = pd.to_numeric(frame['AP Location (ms)'], errors='coerce')
         for column in EXPORT_TIMES:
             out[column] = out[column] - peak
-    return out[EXPORT_COLUMNS]
+    if include_groups and 'Group' in frame:
+        group = frame['Group'].map(lambda value: '' if pd.isna(value) else str(value).strip())
+        if group.ne('').any():
+            out.insert(1, 'Group', group)
+    return out
 
 
 
@@ -148,6 +152,13 @@ def import_kinetics_csv(data, filename='previous_export.csv', timing='Auto'):
     missing = [name for name in EXPORT_COLUMNS if name not in source]
     if missing:
         raise ValueError('Missing required PCAP export columns: ' + ', '.join(missing))
+    group_values = None
+    if 'Group' in source:
+        group_values = source['Group'].fillna('').astype(str).str.strip()
+        allowed = {'', '0', '1', 'True', 'False', 'true', 'false'}
+        if not set(group_values.unique()) <= allowed:
+            raise ValueError('Group must contain 0/1 or True/False (or be blank).')
+        group_values = group_values.replace({'True':'1','true':'1','False':'0','false':'0'})
     if len(source) == 0:
         raise ValueError('Uploaded kinetics CSV contains no recordings.')
     if source['Filename'].isna().any() or source['Filename'].astype(str).str.strip().eq('').any():
@@ -191,6 +202,8 @@ def import_kinetics_csv(data, filename='previous_export.csv', timing='Auto'):
             'Sweep': numeric['Sweep'].iloc[position],
             'Sampling Rate (Hz)': numeric['Sampling Rate (Hz)'].iloc[position],
         })
+        if group_values is not None:
+            row['Group'] = group_values.iloc[position]
         for key, dest in column_map.items():
             row[dest] = numeric[key].iloc[position]
         depth = numeric['AHP amplitude (mV)'].iloc[position]
