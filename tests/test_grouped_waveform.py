@@ -5,6 +5,7 @@ from neuron_compare.bulk import (COLUMNS, EXPORT_COLUMNS, export_frame,
                                  import_kinetics_csv, pairwise_statistics)
 from neuron_compare.group_waveform import group_landmarks, prototype_figure
 from neuron_compare.group_figure import combined_boxplots_png, standalone_waveform_png
+import plotly.graph_objects as go
 
 
 def example(i, group):
@@ -58,7 +59,9 @@ class GroupedWaveformTests(unittest.TestCase):
         fig=prototype_figure(self.rows,self.groups,tests)
         self.assertEqual(len(fig.data),4)
         self.assertGreater(len(standalone_waveform_png(fig)),500)
-        self.assertGreater(len(combined_boxplots_png([],waveform=fig)),500) if False else None
+        box=go.Figure(go.Box(y=[1,2,3], name='Control'))
+        box.update_layout(title='AP Half width (ms)', yaxis_title='AP Half width (ms)')
+        self.assertGreater(len(combined_boxplots_png([box],waveform=fig)),500)
 
 
 if __name__=='__main__':
