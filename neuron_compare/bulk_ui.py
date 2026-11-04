@@ -6,7 +6,8 @@ from .core import Settings
 from .bulk import (analyze_file, results_frame, export_frame, import_kinetics_csv,
                    compare_multiple_groups, pairwise_statistics, GROUP_COLORS, SIGNIFICANCE_METHODS)
 from .group_selection_component import group_selection_grid
-from .group_figure import combined_boxplots_png, combined_boxplots_pdf
+from .group_figure import combined_boxplots_png, combined_boxplots_pdf, standalone_waveform_png
+from .group_waveform import prototype_figure
 
 
 @st.cache_data(max_entries=1024, show_spinner=False)
@@ -18,8 +19,21 @@ def compact_analysis(data, name, channel, settings):
 def render_bulk():
     st.subheader('Bulk Kinetics')
     st.write('Upload rheobase step recordings. Each file contributes the first AP/AHP from its first AP-generating sweep, in recording order.')
-    uploads = st.file_uploader('Bulk rheobase recordings', type=['abf','axgd','axgx'],
-                               accept_multiple_files=True, key='bulk_uploads')
+    grouped = st.checkbox('Assign two groups during upload', value=False, key='bulk_group_mode',
+                          help='Creates a Group column (0 or 1) in both exports, automatically assigned in Compare Groups.')
+    if grouped:
+        first, second = st.columns(2)
+        with first:
+            first_uploads = st.file_uploader('Group 1 recordings (Group = 0)', type=['abf','axgd','axgx'],
+                                              accept_multiple_files=True, key='bulk_group_0')
+        with second:
+            second_uploads = st.file_uploader('Group 2 recordings (Group = 1)', type=['abf','axgd','axgx'],
+                                               accept_multiple_files=True, key='bulk_group_1')
+        uploaded = [(u, str(j)) for j, group in enumerate((first_uploads,second_uploads)) for u in (group or [])]
+    else:
+        uploads = st.file_uploader('Bulk rheobase recordings', type=['abf','axgd','axgx'],
+                                   accept_multiple_files=True, key='bulk_uploads')
+        uploaded = [(u, None) for u in (uploads or [])]
     with st.expander('Bulk analysis settings'):
         channel = st.number_input('Bulk voltage channel rank (0-based)',0,32,0)
         height = st.number_input('Bulk minimum AP peak (mV)',value=-10.)
@@ -40,17 +54,19 @@ def render_bulk():
                         start_ms=start if manual else None,end_ms=end if manual else None)
     st.caption('AHP trough search and recovery are independently configurable. AP and AHP half widths = half-fall − half-rise. Unresolved troughs or half-recovery crossings remain blank instead of being guessed. Review unusually late AHP troughs against the raw trace.')
     files = []
-    for i, upload in enumerate(uploads or []):
+    for i, (upload, group) in enumerate(uploaded):
         digest = hashlib.sha256(upload.getvalue()).hexdigest()
         # Include filename and upload position to distinguish duplicate names/content.
-        files.append((f'{i+1}:{digest}:{upload.name}',upload))
-    signature = (tuple(key for key,_ in files), tuple(asdict(settings).items()), int(channel))
+        files.append((f'{i+1}:{digest}:{upload.name}',upload,group))
+    signature = (tuple((key,group) for key,_,group in files), tuple(asdict(settings).items()), int(channel))
     if st.button('Process files',disabled=not files,key='process_bulk'):
         rows = []
         progress = st.progress(0.,text='Processing recordings…')
-        for i,(key,upload) in enumerate(files):
+        for i,(key,upload,group) in enumerate(files):
             row = compact_analysis(upload.getvalue(),upload.name,int(channel),settings)
             row['File ID'] = key
+            if grouped:
+                row['Group'] = group
             rows.append(row)
             progress.progress((i+1)/len(files),text=f'Processed {i+1} of {len(files)}')
         progress.empty()
@@ -65,12 +81,12 @@ def render_bulk():
     st.success(f"{len(rows)} files processed · {counts.get('OK',0)} complete · {counts.get('Partial',0)} partial · {counts.get('No AP',0)} without APs · {counts.get('Error',0)} errors")
     absolute, relative = st.columns(2)
     absolute.download_button('Download absolute kinetics CSV',
-                             export_frame(rows).to_csv(index=False,na_rep='').encode('utf-8-sig'),
+                             export_frame(rows, include_groups=True).to_csv(index=False,na_rep='').encode('utf-8-sig'),
                              file_name='bulk_kinetics_absolute.csv',mime='text/csv',key='bulk_absolute_csv',width='stretch')
     relative.download_button('Download relative kinetics CSV',
-                             export_frame(rows,relative=True).to_csv(index=False,na_rep='').encode('utf-8-sig'),
+                             export_frame(rows,relative=True,include_groups=True).to_csv(index=False,na_rep='').encode('utf-8-sig'),
                              file_name='bulk_kinetics_relative.csv',mime='text/csv',key='bulk_relative_csv',width='stretch')
-    st.caption('Both exports use the 16-column worksheet. Relative timestamps have AP peak = 0 ms. AHP Half-Fall is the descending midpoint crossing before the trough.')
+    st.caption('Both exports use the 16-column worksheet (plus Group when assigned). Relative timestamps have AP peak = 0 ms. AHP Half-Fall is the descending midpoint crossing before the trough.')
     return saved
 
 
@@ -93,7 +109,7 @@ def render_groups(batch):
     upload = st.file_uploader(
         'Upload previously exported kinetics CSV (optional)', type=['csv'],
         key='comparison_import_csv',
-        help='Accepts the 16-column PCAP absolute or relative kinetics CSV. '
+        help='Accepts the PCAP absolute or relative kinetics CSV, optionally with a Group column. '
              'Importing does not require uploading the original ABF files.'
     )
     if upload is not None:
@@ -131,7 +147,10 @@ def render_groups(batch):
         st.session_state['comparison_batch_signature'] = signature
         st.session_state['comparison_group_count'] = 2
         st.session_state.pop('bulk_comparison', None)
-        st.session_state['comparison_assignments'] = {}
+        st.session_state['comparison_assignments'] = {
+            str(row['File ID']): int(str(row['Group']))
+            for row in eligible if str(row.get('Group', '')).strip() in ('0', '1')
+        }
         st.session_state['comparison_assignment_signature'] = signature
         for key in list(st.session_state):
             if key.startswith('comparison_cell_') or key.startswith('comparison_name_'):
@@ -213,6 +232,18 @@ def render_groups(batch):
         return
     figures, summary = compare_multiple_groups(rows, active, significance_method=significance_method)
     tests = pairwise_statistics(rows, active)
+    waveform = prototype_figure(rows, active, tests, significance_method=significance_method)
+    st.subheader('Prototypical AP/AHP waveforms')
+    st.plotly_chart(waveform, width='stretch', key='group_prototype')
+    st.caption('Schematic curves connect group means of measured landmarks, not averaged raw traces. '
+               'Voltages are relative to AP threshold (0 mV) because the 16-column CSV does not retain absolute threshold voltage. '
+               'Asterisks indicate significant per-metric comparisons under the selected correction; '
+               'time and amplitude are tested separately. Missing measurements are omitted.')
+    try:
+        st.download_button('Download prototypical waveforms PNG', standalone_waveform_png(waveform),
+                           file_name='pcap_group_waveforms.png',mime='image/png',key='download_prototype_png')
+    except Exception as exc:
+        st.warning('Waveform PNG could not be generated: '+str(exc))
     st.caption('Bracket asterisks use ' + significance_method +
                '. Each plot lists raw Welch, Benjamini-Hochberg FDR, and Holm-Bonferroni p-values (in that order). '
                'Corrections cover all displayed metrics and group pairs. p-values are unavailable '
@@ -225,7 +256,7 @@ def render_groups(batch):
         help='Centered at the top of both combined exports. Leave blank for no title.'
     ).strip()
     try:
-        png = combined_boxplots_png(figures, title=export_title)
+        png = combined_boxplots_png(figures, title=export_title, waveform=waveform)
     except Exception as exc:
         st.warning('Combined PNG could not be generated: ' + str(exc))
     else:
@@ -233,7 +264,7 @@ def render_groups(batch):
                            file_name='pcap_group_boxplots.png', mime='image/png',
                            key='download_comparison_master_png')
     try:
-        pdf = combined_boxplots_pdf(figures, title=export_title)
+        pdf = combined_boxplots_pdf(figures, title=export_title, waveform=waveform)
     except Exception as exc:
         st.warning('Combined PDF could not be generated: ' + str(exc))
     else:

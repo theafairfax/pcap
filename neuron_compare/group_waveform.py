@@ -1,0 +1,124 @@
+"""Landmark-derived schematic AP/AHP profiles (not averaged voltage traces).
+
+The 16-column bulk export carries times and amplitudes but no absolute voltages
+or raw samples. Therefore profiles show mV relative to AP threshold (0 mV).
+Each landmark coordinate is the mean of that measurement across cells; PCHIP
+joins them visually but adds no independent observations.
+"""
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+from scipy.interpolate import PchipInterpolator
+from .bulk import export_frame, results_frame, GROUP_COLORS, SIGNIFICANCE_METHODS, significance_label
+
+# Timestamp column, height as fraction of mean AP amplitude or AHP depth.
+LANDMARKS = (
+    ('AP Onset (ms)', 0., 'AP onset'),
+    ('AP Rise 10% (ms)', .1, 'Rise 10%'),
+    ('AP Half rise (ms)', .5, 'Half rise'),
+    ('AP Rise 90% (ms)', .9, 'Rise 90%'),
+    ('AP Location (ms)', 1., 'AP peak'),
+    ('AP Half fall (ms)', .5, 'Half fall'),
+    ('AHP Onset (ms)', 0., 'AHP onset'),
+    ('AHP Half-Fall (ms)', -.5, 'AHP half-fall'),
+    ('AHP Location (ms)', -1., 'AHP trough'),
+)
+# Independent hypotheses already included in the comparison family.
+TEST_MEASURES = {
+    'AP onset':'AP Onset (ms)', 'Rise 10%':'AP Rise 10% (ms)',
+    'Half rise':'AP Half rise (ms)', 'Rise 90%':'AP Rise 90% (ms)',
+    'Half fall':'AP Half fall (ms)', 'AHP onset':'AHP Onset (ms)',
+    'AHP half-fall':'AHP Half-Fall (ms)', 'AHP trough':'AHP Location (ms)',
+    'AP peak':'AP amplitude (mV)', 'AHP depth':'AHP amplitude (mV)',
+}
+ 
+def group_landmarks(rows, groups):
+    frame = export_frame(rows, relative=True)
+    frame.index = results_frame(rows)['File ID'].astype(str)
+    data = {}
+    for name, ids in groups.items():
+        cohort = frame.loc[list(ids)]
+        ap = pd.to_numeric(cohort['AP amplitude (mV)'], errors='coerce').mean()
+        ahp = pd.to_numeric(cohort['AHP amplitude (mV)'], errors='coerce').mean()
+        if not np.isfinite(ap) or not np.isfinite(ahp) or ap <= 0 or ahp <= 0:
+            continue
+        points = []
+        for column, factor, label in LANDMARKS:
+            x = pd.to_numeric(cohort[column], errors='coerce').mean()
+            if np.isfinite(x):
+                points.append((float(x), float(factor*(ap if factor >= 0 else ahp)), label))
+        # Keep chronological order. Coincident markers share one x; avoid
+        # manufacturing an interpolation crossing across duplicate timestamps.
+        points.sort(key=lambda item: item[0])
+        unique = []
+        for point in points:
+            if unique and abs(unique[-1][0] - point[0]) < 1e-8:
+                continue
+            unique.append(point)
+        if len(unique) >= 3:
+            data[name] = unique
+    return data
+
+
+def prototype_figure(rows, groups, tests, significance_method='Holm-Bonferroni'):
+    """Draw two mean-landmark profiles and annotate tested differences.
+
+    Time and voltage marker tests are reused from the *same* corrected family
+    as the boxplots. No p-values are calculated from the schematic lines.
+    """
+    if significance_method not in SIGNIFICANCE_METHODS:
+        raise ValueError('Unknown significance method.')
+    profiles = group_landmarks(rows, groups)
+    fig = go.Figure()
+    point_lookup = {}
+    for i, (name, points) in enumerate(profiles.items()):
+        x = np.asarray([p[0] for p in points])
+        y = np.asarray([p[1] for p in points])
+        color = GROUP_COLORS[i % len(GROUP_COLORS)]
+        smooth_x = np.linspace(x[0], x[-1], 500)
+        smooth_y = PchipInterpolator(x, y)(smooth_x)
+        fig.add_trace(go.Scatter(x=smooth_x, y=smooth_y, mode='lines', name=name,
+                                 line=dict(color=color, width=3),
+                                 hovertemplate=name+'<br>t=%{x:.3f} ms<br>relative Vm=%{y:.2f} mV<extra></extra>'))
+        fig.add_trace(go.Scatter(x=x, y=y, mode='markers', name=name+' landmarks',
+                                 marker=dict(color=color, size=9, line=dict(color='white',width=1)),
+                                 text=[p[2] for p in points],
+                                 customdata=np.array([[len(groups[name])]]*len(points)),
+                                 hovertemplate='%{text}<br>t=%{x:.3f} ms<br>relative Vm=%{y:.2f} mV<extra></extra>',
+                                 showlegend=False))
+        point_lookup[name] = {p[2]: p for p in points}
+    # Significance stars use the specified p-value adjustment. They live
+    # adjacent to the landmark tested, not between arbitrary curve samples.
+    if len(groups) == 2 and len(profiles) == 2:
+        group_names = list(groups)
+        column = SIGNIFICANCE_METHODS[significance_method]
+        finite_y = [p[1] for v in profiles.values() for p in v]
+        pad = max(3., (max(finite_y)-min(finite_y))*.08) if finite_y else 4.
+        for label, measure in TEST_MEASURES.items():
+            match = tests.loc[tests['Measure'].eq(measure) &
+                              tests['Group A'].eq(group_names[0]) &
+                              tests['Group B'].eq(group_names[1])]
+            point_label = 'AHP trough' if label == 'AHP depth' else label
+            if match.empty or point_label not in point_lookup[group_names[0]] or point_label not in point_lookup[group_names[1]]:
+                continue
+            p = float(match.iloc[0][column])
+            if not np.isfinite(p) or p >= .05:
+                continue
+            a, b = point_lookup[group_names[0]][point_label], point_lookup[group_names[1]][point_label]
+            # Horizontal timing offset or vertical voltage difference.
+            is_voltage = measure.endswith('amplitude (mV)')
+            xx = (a[0]+b[0])/2
+            yy = max(a[1],b[1])+pad*(1.1 if label == 'AP peak' else (-.7 if label == 'AHP depth' else .45))
+            fig.add_annotation(x=xx,y=yy,text=significance_label(p),
+                               showarrow=False,font=dict(size=15,color='#111827'),
+                               hovertext=f'{label}: {significance_method}; p={p:.4g}')
+    fig.add_vline(x=0, line=dict(color='#94a3b8', dash='dash',width=1))
+    fig.add_hline(y=0, line=dict(color='#94a3b8',dash='dot',width=1))
+    fig.update_layout(title='Prototypical AP/AHP by group · mean kinetic landmarks',
+                      template='plotly_white',height=530,
+                      margin=dict(l=55,r=30,t=65,b=95),
+                      xaxis_title='Time relative to AP peak (ms)',
+                      yaxis_title='Membrane potential relative to AP threshold (mV)',
+                      legend=dict(orientation='h',y=1.08),
+                      annotations=list(fig.layout.annotations or []))
+    return fig
