@@ -29,7 +29,7 @@ TEST_MEASURES = {
     'Half rise':'AP Half rise (ms)', 'Rise 90%':'AP Rise 90% (ms)',
     'Half fall':'AP Half fall (ms)', 'AHP onset':'AHP Onset (ms)',
     'AHP half-fall':'AHP Half-Fall (ms)', 'AHP trough':'AHP Location (ms)',
-    'AP peak':'AP amplitude (mV)',
+    'AP peak':'AP amplitude (mV)', 'AHP depth':'AHP amplitude (mV)',
 }
  
 def group_landmarks(rows, groups):
@@ -98,16 +98,17 @@ def prototype_figure(rows, groups, tests, significance_method='Holm-Bonferroni')
             match = tests.loc[tests['Measure'].eq(measure) &
                               tests['Group A'].eq(group_names[0]) &
                               tests['Group B'].eq(group_names[1])]
-            if match.empty or label not in point_lookup[group_names[0]] or label not in point_lookup[group_names[1]]:
+            point_label = 'AHP trough' if label == 'AHP depth' else label
+            if match.empty or point_label not in point_lookup[group_names[0]] or point_label not in point_lookup[group_names[1]]:
                 continue
             p = float(match.iloc[0][column])
             if not np.isfinite(p) or p >= .05:
                 continue
-            a, b = point_lookup[group_names[0]][label], point_lookup[group_names[1]][label]
+            a, b = point_lookup[group_names[0]][point_label], point_lookup[group_names[1]][point_label]
             # Horizontal timing offset or vertical voltage difference.
             is_voltage = measure.endswith('amplitude (mV)')
             xx = (a[0]+b[0])/2
-            yy = max(a[1],b[1])+pad*(1.1 if is_voltage else .45)
+            yy = max(a[1],b[1])+pad*(1.1 if label == 'AP peak' else (-.7 if label == 'AHP depth' else .45))
             fig.add_annotation(x=xx,y=yy,text=significance_label(p),
                                showarrow=False,font=dict(size=15,color='#111827'),
                                hovertext=f'{label}: {significance_method}; p={p:.4g}')
