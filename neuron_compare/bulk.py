@@ -125,8 +125,8 @@ def export_frame(rows, relative=False, include_groups=False):
         peak = pd.to_numeric(frame['AP Location (ms)'], errors='coerce')
         for column in EXPORT_TIMES:
             out[column] = out[column] - peak
-    if include_groups and 'Group' in frame:
-        group = frame['Group'].map(lambda value: '' if pd.isna(value) else str(value).strip())
+    if include_groups and any('Group' in row for row in rows):
+        group = pd.Series([row.get('Group', '') for row in rows]).map(lambda value: '' if pd.isna(value) else str(value).strip())
         if group.ne('').any():
             out.insert(1, 'Group', group)
     return out
