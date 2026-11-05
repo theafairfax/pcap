@@ -8,6 +8,7 @@ joins them visually but adds no independent observations.
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from scipy.interpolate import PchipInterpolator
 from .bulk import export_frame, results_frame, GROUP_COLORS, SIGNIFICANCE_METHODS, significance_label
 
@@ -31,7 +32,39 @@ TEST_MEASURES = {
     'AHP half-fall':'AHP Half-Fall (ms)', 'AHP trough':'AHP Location (ms)',
     'AP peak':'AP amplitude (mV)', 'AHP depth':'AHP amplitude (mV)',
 }
- 
+
+def significant_waveform_pairs(tests, groups, significance_method='Holm-Bonferroni'):
+    """Return significant group/landmark tests, using the boxplots' corrected family.
+
+    These results describe measured landmarks, not comparisons between fitted
+    curve samples. Keep full group labels to disambiguate 3–6 group overlays.
+    """
+    if significance_method not in SIGNIFICANCE_METHODS:
+        raise ValueError('Unknown significance method.')
+    column = SIGNIFICANCE_METHODS[significance_method]
+    relevant = {measure: label for label, measure in TEST_MEASURES.items()}
+    names = set(groups)
+    out = []
+    for _, result in tests.iterrows():
+        metric = result['Measure']
+        a, b = result['Group A'], result['Group B']
+        if metric not in relevant or a not in names or b not in names:
+            continue
+        p = float(result[column])
+        if not np.isfinite(p) or p >= .05:
+            continue
+        out.append({
+            'Landmark': relevant[metric],
+            'Group A': a, 'Group B': b,
+            'Significance': significance_label(p),
+            'Adjusted p-value': p,
+        })
+    return sorted(out, key=lambda r: (
+        list(TEST_MEASURES).index(r['Landmark']),
+        list(groups).index(r['Group A']), list(groups).index(r['Group B'])
+    ))
+
+
 def group_landmarks(rows, groups):
     frame = export_frame(rows, relative=True)
     frame.index = results_frame(rows)['File ID'].astype(str)
@@ -69,18 +102,37 @@ def prototype_figure(rows, groups, tests, significance_method='Holm-Bonferroni')
     if significance_method not in SIGNIFICANCE_METHODS:
         raise ValueError('Unknown significance method.')
     profiles = group_landmarks(rows, groups)
-    fig = go.Figure()
+    # More than two waveforms need a group-pair key INSIDE the downloadable
+    # graphic, not unexplained stars near densely overlapping curves.
+    pair_rows = significant_waveform_pairs(
+        tests, groups, significance_method) if len(groups) > 2 else []
+    multi = len(groups) > 2
+    table_height = max(150, (len(pair_rows) + 1) * 25) if multi else 0
+    chart_height = 515
+    if multi:
+        total_height = chart_height + table_height + 70
+        fig = make_subplots(
+            rows=2, cols=1, specs=[[{'type': 'xy'}], [{'type': 'table'}]],
+            row_heights=[chart_height, table_height],
+            vertical_spacing=min(.06, 40 / total_height))
+    else:
+        fig = go.Figure()
     point_lookup = {}
+    def add_curve(trace):
+        if multi:
+            fig.add_trace(trace, row=1, col=1)
+        else:
+            fig.add_trace(trace)
     for i, (name, points) in enumerate(profiles.items()):
         x = np.asarray([p[0] for p in points])
         y = np.asarray([p[1] for p in points])
         color = GROUP_COLORS[i % len(GROUP_COLORS)]
         smooth_x = np.linspace(x[0], x[-1], 500)
         smooth_y = PchipInterpolator(x, y)(smooth_x)
-        fig.add_trace(go.Scatter(x=smooth_x, y=smooth_y, mode='lines', name=name,
+        add_curve(go.Scatter(x=smooth_x, y=smooth_y, mode='lines', name=name,
                                  line=dict(color=color, width=3),
                                  hovertemplate=name+'<br>t=%{x:.3f} ms<br>relative Vm=%{y:.2f} mV<extra></extra>'))
-        fig.add_trace(go.Scatter(x=x, y=y, mode='markers', name=name+' landmarks',
+        add_curve(go.Scatter(x=x, y=y, mode='markers', name=name+' landmarks',
                                  marker=dict(color=color, size=9, line=dict(color='white',width=1)),
                                  text=[p[2] for p in points],
                                  customdata=np.array([[len(groups[name])]]*len(points)),
@@ -112,13 +164,41 @@ def prototype_figure(rows, groups, tests, significance_method='Holm-Bonferroni')
             fig.add_annotation(x=xx,y=yy,text=significance_label(p),
                                showarrow=False,font=dict(size=15,color='#111827'),
                                hovertext=f'{label}: {significance_method}; p={p:.4g}')
-    fig.add_vline(x=0, line=dict(color='#94a3b8', dash='dash',width=1))
-    fig.add_hline(y=0, line=dict(color='#94a3b8',dash='dot',width=1))
+    if multi:
+        if pair_rows:
+            columns = [
+                [r['Landmark'] for r in pair_rows],
+                [r['Group A'] + ' vs ' + r['Group B'] for r in pair_rows],
+                [r['Significance'] for r in pair_rows],
+                [f"{r['Adjusted p-value']:.4g}" for r in pair_rows],
+            ]
+        else:
+            columns = [['No significant landmark differences'], ['—'], ['—'], ['—']]
+        fig.add_trace(go.Table(
+            header=dict(values=['Landmark', 'Compared groups', 'Significance',
+                                significance_method + ' p'],
+                        fill_color='#e2e8f0', align='left', height=26,
+                        font=dict(size=11, color='#334155')),
+            cells=dict(values=columns, align='left', height=25,
+                       fill_color='#f8fafc', font=dict(size=10)),
+            columnwidth=[130, 175, 85, 160]), row=2, col=1)
+    if multi:
+        # Plotly's add_vline/add_hline helpers cannot be used on figures
+        # containing a Table subplot; add shapes directly to the XY axes.
+        fig.add_shape(type='line', xref='x', yref='y domain',
+                      x0=0, x1=0, y0=0, y1=1,
+                      line=dict(color='#94a3b8', dash='dash', width=1))
+        fig.add_shape(type='line', xref='x domain', yref='y',
+                      x0=0, x1=1, y0=0, y1=0,
+                      line=dict(color='#94a3b8', dash='dot', width=1))
+    else:
+        fig.add_vline(x=0, line=dict(color='#94a3b8', dash='dash', width=1))
+        fig.add_hline(y=0, line=dict(color='#94a3b8', dash='dot', width=1))
     fig.update_layout(title='Prototypical AP/AHP by group · mean kinetic landmarks',
-                      template='plotly_white',height=530,
+                      template='plotly_white',height=(chart_height + table_height + 70 if multi else 530),
                       margin=dict(l=55,r=30,t=65,b=95),
                       xaxis_title='Time relative to AP peak (ms)',
                       yaxis_title='Membrane potential relative to AP threshold (mV)',
-                      legend=dict(orientation='h',y=1.08),
+                      legend=dict(orientation='h',y=1.08 if not multi else 1.02),
                       annotations=list(fig.layout.annotations or []))
     return fig
