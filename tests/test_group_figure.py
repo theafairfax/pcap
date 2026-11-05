@@ -57,7 +57,7 @@ class GroupFigureTests(unittest.TestCase):
             plt.close(combined)
         png = combined_boxplots_png([fig], title='Nifedipine experiment', dpi=90)
         pdf = combined_boxplots_pdf([fig], title='Nifedipine experiment')
-        self.assertTrue(png.startswith(b'\\x89PNG'))
+        self.assertTrue(png.startswith(bytes((137, 80, 78, 71))))
         self.assertTrue(pdf.startswith(b'%PDF-'))
 
     def test_no_figures(self):
