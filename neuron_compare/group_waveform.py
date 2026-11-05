@@ -182,8 +182,14 @@ def prototype_figure(rows, groups, tests, significance_method='Holm-Bonferroni')
             cells=dict(values=columns, align='left', height=25,
                        fill_color='#f8fafc', font=dict(size=10)),
             columnwidth=[130, 175, 85, 160]), row=2, col=1)
-    fig.add_vline(x=0, line=dict(color='#94a3b8', dash='dash',width=1))
-    fig.add_hline(y=0, line=dict(color='#94a3b8',dash='dot',width=1))
+    if multi:
+        fig.add_vline(x=0, row=1, col=1,
+                      line=dict(color='#94a3b8', dash='dash', width=1))
+        fig.add_hline(y=0, row=1, col=1,
+                      line=dict(color='#94a3b8', dash='dot', width=1))
+    else:
+        fig.add_vline(x=0, line=dict(color='#94a3b8', dash='dash', width=1))
+        fig.add_hline(y=0, line=dict(color='#94a3b8', dash='dot', width=1))
     fig.update_layout(title='Prototypical AP/AHP by group · mean kinetic landmarks',
                       template='plotly_white',height=(chart_height + table_height + 70 if multi else 530),
                       margin=dict(l=55,r=30,t=65,b=95),
