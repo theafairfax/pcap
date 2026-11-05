@@ -19,17 +19,20 @@ def compact_analysis(data, name, channel, settings):
 def render_bulk():
     st.subheader('Bulk Kinetics')
     st.write('Upload rheobase step recordings. Each file contributes the first AP/AHP from its first AP-generating sweep, in recording order.')
-    grouped = st.checkbox('Assign two groups during upload', value=False, key='bulk_group_mode',
-                          help='Creates a Group column (0 or 1) in both exports, automatically assigned in Compare Groups.')
+    grouped = st.checkbox('Assign groups during upload', value=False, key='bulk_group_mode',
+                          help='Separate recordings into 2–6 groups. CSV Group values run from 0 to 5 and are auto-assigned in Compare Groups.')
     if grouped:
-        first, second = st.columns(2)
-        with first:
-            first_uploads = st.file_uploader('Group 1 recordings (Group = 0)', type=['abf','axgd','axgx'],
-                                              accept_multiple_files=True, key='bulk_group_0')
-        with second:
-            second_uploads = st.file_uploader('Group 2 recordings (Group = 1)', type=['abf','axgd','axgx'],
-                                               accept_multiple_files=True, key='bulk_group_1')
-        uploaded = [(u, str(j)) for j, group in enumerate((first_uploads,second_uploads)) for u in (group or [])]
+        group_count = st.select_slider('Number of upload groups', options=list(range(2, 7)),
+                                       value=2, key='bulk_upload_group_count')
+        columns = st.columns(min(group_count, 3))
+        group_uploads = []
+        for j in range(group_count):
+            with columns[j % len(columns)]:
+                group_uploads.append(st.file_uploader(
+                    f'Group {j+1} recordings (Group = {j})',
+                    type=['abf','axgd','axgx'], accept_multiple_files=True,
+                    key=f'bulk_group_{j}'))
+        uploaded = [(u, str(j)) for j, group in enumerate(group_uploads) for u in (group or [])]
     else:
         uploads = st.file_uploader('Bulk rheobase recordings', type=['abf','axgd','axgx'],
                                    accept_multiple_files=True, key='bulk_uploads')
@@ -145,21 +148,21 @@ def render_groups(batch):
     signature = batch['signature']
     if st.session_state.get('comparison_batch_signature') != signature:
         st.session_state['comparison_batch_signature'] = signature
-        st.session_state['comparison_group_count'] = 2
+        assigned_indices = [int(str(row['Group']).strip()) for row in eligible
+                            if str(row.get('Group', '')).strip() in tuple(str(j) for j in range(6))]
+        st.session_state['comparison_group_count'] = max(2, max(assigned_indices, default=-1) + 1)
         st.session_state.pop('bulk_comparison', None)
         st.session_state['comparison_assignments'] = {
             str(row['File ID']): int(str(row['Group']))
-            for row in eligible if str(row.get('Group', '')).strip() in ('0', '1')
+            for row in eligible if str(row.get('Group', '')).strip() in tuple(str(j) for j in range(6))
         }
         st.session_state['comparison_assignment_signature'] = signature
         for key in list(st.session_state):
             if key.startswith('comparison_cell_') or key.startswith('comparison_name_'):
                 del st.session_state[key]
     count = st.session_state.get('comparison_group_count', 2)
-    if st.button('Add another group', key='add_comparison_group'):
-        count += 1
-        st.session_state['comparison_group_count'] = count
-        st.session_state.pop('bulk_comparison', None)
+    count = st.select_slider('Number of comparison groups', options=list(range(2, 7)),
+                             value=max(2, min(6, count)), key='comparison_group_count')
 
     sort_mode = st.radio('Filename ordering',
                          ['Upload order', 'Alphanumeric (A–Z)', 'Alphanumeric (Z–A)'],
@@ -204,7 +207,7 @@ def render_groups(batch):
             repr((signature, sort_mode, count, tuple(group_names))).encode()).hexdigest()[:12])
     if isinstance(group_data, dict):
         existing = {str(k): int(v) for k,v in group_data.items()
-                    if str(k) in {f['id'] for f in files} and isinstance(v, (int, float))}
+                    if str(k) in {f['id'] for f in files} and isinstance(v, (int, float)) and int(v) == v and -1 <= int(v) < count}
         st.session_state[assignments_key] = existing
     groups = {
         group_names[j]: [str(row['File ID']) for row in eligible
@@ -237,8 +240,9 @@ def render_groups(batch):
     st.plotly_chart(waveform, width='stretch', key='group_prototype')
     st.caption('Schematic curves connect group means of measured landmarks, not averaged raw traces. '
                'Voltages are relative to AP threshold (0 mV) because the 16-column CSV does not retain absolute threshold voltage. '
-               'Asterisks indicate significant per-metric comparisons under the selected correction; '
-               'time and amplitude are tested separately. Missing measurements are omitted.')
+               'Two-group waveforms mark significant landmarks; for three or more groups, '
+               'use the pairwise boxplot brackets and statistics CSV for unambiguous tests. '
+               'Missing measurements are omitted.')
     try:
         st.download_button('Download prototypical waveforms PNG', standalone_waveform_png(waveform),
                            file_name='pcap_group_waveforms.png',mime='image/png',key='download_prototype_png')
