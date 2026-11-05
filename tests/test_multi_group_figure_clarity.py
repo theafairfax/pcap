@@ -14,7 +14,31 @@ from neuron_compare.group_figure import (
 from neuron_compare.group_waveform import (
     prototype_figure, significant_waveform_pairs,
 )
-from tests.test_six_groups import recording
+from neuron_compare.bulk import COLUMNS
+
+
+def recording(index, group):
+    row = dict.fromkeys(COLUMNS, np.nan)
+    baseline = 100 + index * 10
+    row.update({
+        'File ID': f'cell{index}', 'Filename': f'cell{index}.abf',
+        'Status': 'OK', 'Group': str(group), 'Sweep': 1,
+        'Sampling Rate (Hz)': 50000,
+        'AP Location (ms)': baseline,
+        'AP Onset (ms)': baseline - .6,
+        'AP Rise 10% (ms)': baseline - .5,
+        'AP Rise 90% (ms)': baseline - .2,
+        'AP Rise 10–90% (ms)': .3,
+        'AP Half rise (ms)': baseline - .35,
+        'AP Half fall (ms)': baseline + .4,
+        'AP Half width (ms)': .75,
+        'AHP Onset (ms)': baseline + .6,
+        'AHP Half rise (ms)': baseline + 1.2,
+        'AHP Location (ms)': baseline + 2,
+        'AP Amplitude from AP threshold (mV)': 80 + group * 3 + index % 2,
+        'AHP Amplitude from AP threshold (mV)': -(10 + group + index % 2),
+    })
+    return row
 
 
 class FigureClarityTests(unittest.TestCase):
