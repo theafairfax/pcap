@@ -7,7 +7,7 @@ from .bulk import (analyze_file, results_frame, export_frame, import_kinetics_cs
                    compare_multiple_groups, pairwise_statistics, GROUP_COLORS, SIGNIFICANCE_METHODS)
 from .group_selection_component import group_selection_grid
 from .group_figure import combined_boxplots_png, combined_boxplots_pdf, standalone_waveform_png
-from .group_waveform import prototype_figure
+from .group_waveform import prototype_figure, significant_waveform_pairs
 
 
 @st.cache_data(max_entries=1024, show_spinner=False)
@@ -240,9 +240,15 @@ def render_groups(batch):
     st.plotly_chart(waveform, width='stretch', key='group_prototype')
     st.caption('Schematic curves connect group means of measured landmarks, not averaged raw traces. '
                'Voltages are relative to AP threshold (0 mV) because the 16-column CSV does not retain absolute threshold voltage. '
-               'Two-group waveforms mark significant landmarks; for three or more groups, '
-               'use the pairwise boxplot brackets and statistics CSV for unambiguous tests. '
+               'For three or more groups, the table beneath the waveform identifies every significant '
+               'landmark and its specific group pair using the selected p-value correction. '
                'Missing measurements are omitted.')
+    if len(active) > 2:
+        significant = significant_waveform_pairs(tests, active, significance_method)
+        if significant:
+            st.dataframe(significant, hide_index=True, width='stretch')
+        else:
+            st.caption('No significant landmark comparisons under ' + significance_method + '.')
     try:
         st.download_button('Download prototypical waveforms PNG', standalone_waveform_png(waveform),
                            file_name='pcap_group_waveforms.png',mime='image/png',key='download_prototype_png')
