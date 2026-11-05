@@ -61,7 +61,7 @@ def group_landmarks(rows, groups):
 
 
 def prototype_figure(rows, groups, tests, significance_method='Holm-Bonferroni'):
-    """Draw two mean-landmark profiles and annotate tested differences.
+    """Overlay up to six mean-landmark profiles and annotate two-group differences.
 
     Time and voltage marker tests are reused from the *same* corrected family
     as the boxplots. No p-values are calculated from the schematic lines.

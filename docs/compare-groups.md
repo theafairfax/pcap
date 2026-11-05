@@ -9,3 +9,10 @@ Assign each file using the checkbox matrix; each recording belongs to at most on
 Time landmarks in comparisons are relative to the AP peak. Durations and amplitudes remain in their measured units.
 
 Where supported, plots report two-sided Welch-test p-values and Holm-adjusted p-values across tested comparisons. **These tests assume independent observations**: paired measurements and recordings clustered by cell or animal require different statistical models. A nonsignificant p-value does not establish equivalence.
+
+
+## Comparing up to six groups
+
+Compare Groups accepts 2–6 named groups. The group-count selector automatically expands to match group IDs found in the current bulk results or an imported PCAP kinetics CSV. Previously exported two-group CSVs and legacy `True`/`False` group values remain supported. File assignments can also be changed manually; each recording belongs to at most one group.
+
+Every metric provides one boxplot per active group and pairwise Welch comparisons for all group pairs (up to 15 pairs with six groups). Benjamini–Hochberg and Holm adjustments apply across all tested metrics and group pairs. **Prototypical AP/AHP waveforms** overlay up to six landmark-derived curves, each aligned at its AP peak (t = 0); these schematics are *not* averages of raw voltage traces. Two-group waveforms show significance annotations, while larger comparisons use the boxplot brackets and statistical CSV to communicate pairwise significance. Standalone waveform PNG and combined PNG/PDF exports include all overlaid curves.

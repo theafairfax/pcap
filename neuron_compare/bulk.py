@@ -155,9 +155,9 @@ def import_kinetics_csv(data, filename='previous_export.csv', timing='Auto'):
     group_values = None
     if 'Group' in source:
         group_values = source['Group'].fillna('').astype(str).str.strip()
-        allowed = {'', '0', '1', 'True', 'False', 'true', 'false'}
+        allowed = {'', *map(str, range(6)), 'True', 'False', 'true', 'false'}
         if not set(group_values.unique()) <= allowed:
-            raise ValueError('Group must contain 0/1 or True/False (or be blank).')
+            raise ValueError('Group must contain 0–5 or legacy True/False (or be blank).')
         group_values = group_values.replace({'True':'1','true':'1','False':'0','false':'0'})
     if len(source) == 0:
         raise ValueError('Uploaded kinetics CSV contains no recordings.')
@@ -349,8 +349,8 @@ def compare_multiple_groups(rows, groups, significance_method='Holm-Bonferroni')
         raise ValueError('Unknown significance correction: ' + str(significance_method))
     significance_column = SIGNIFICANCE_METHODS[significance_method]
     groups = {str(name): list(ids) for name, ids in groups.items()}
-    if len(groups) < 2 or any(not ids for ids in groups.values()):
-        raise ValueError('Assign at least one file to each of two or more groups.')
+    if not 2 <= len(groups) <= 6 or any(not ids for ids in groups.values()):
+        raise ValueError('Assign at least one file to each of 2–6 groups.')
     flattened = [file_id for ids in groups.values() for file_id in ids]
     if len(flattened) != len(set(flattened)):
         raise ValueError('A recording can only be assigned to one group.')
