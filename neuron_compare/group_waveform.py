@@ -183,9 +183,13 @@ def prototype_figure(rows, groups, tests, significance_method='Holm-Bonferroni')
                        fill_color='#f8fafc', font=dict(size=10)),
             columnwidth=[130, 175, 85, 160]), row=2, col=1)
     if multi:
-        fig.add_vline(x=0, row=1, col=1,
+        # Plotly's add_vline/add_hline helpers cannot be used on figures
+        # containing a Table subplot; add shapes directly to the XY axes.
+        fig.add_shape(type='line', xref='x', yref='y domain',
+                      x0=0, x1=0, y0=0, y1=1,
                       line=dict(color='#94a3b8', dash='dash', width=1))
-        fig.add_hline(y=0, row=1, col=1,
+        fig.add_shape(type='line', xref='x domain', yref='y',
+                      x0=0, x1=1, y0=0, y1=0,
                       line=dict(color='#94a3b8', dash='dot', width=1))
     else:
         fig.add_vline(x=0, line=dict(color='#94a3b8', dash='dash', width=1))
