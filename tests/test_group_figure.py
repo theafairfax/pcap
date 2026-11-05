@@ -44,9 +44,15 @@ class GroupFigureTests(unittest.TestCase):
             axis = combined.axes[0]
             self.assertIn('n=2', [t.get_text() for t in axis.texts])
             self.assertIn('n=3', [t.get_text() for t in axis.texts])
-            summary = next(t for t in axis.texts if 'Welch p=' in t.get_text())
-            self.assertEqual(summary.get_ha(), 'center')
-            self.assertGreaterEqual(summary.get_fontsize(), 9)
+            # Each panel now has its own independent p-value TABLE axes.
+            table_axes = combined.axes[1]
+            self.assertTrue(table_axes.tables)
+            cells = table_axes.tables[0].get_celld()
+            table_text = [cell.get_text().get_text() for cell in cells.values()]
+            self.assertIn('Control vs Drug', table_text)
+            self.assertIn('0.01', table_text)
+            self.assertIn('0.02', table_text)
+            self.assertIn('0.03', table_text)
         finally:
             plt.close(combined)
         png = combined_boxplots_png([fig], title='Nifedipine experiment', dpi=90)
