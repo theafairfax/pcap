@@ -89,7 +89,7 @@ def render_bulk():
     relative.download_button('Download relative kinetics CSV',
                              export_frame(rows,relative=True,include_groups=True).to_csv(index=False,na_rep='').encode('utf-8-sig'),
                              file_name='bulk_kinetics_relative.csv',mime='text/csv',key='bulk_relative_csv',width='stretch')
-    st.caption('Both exports use the 16-column worksheet (plus Group when assigned). Relative timestamps have AP peak = 0 ms. AHP Half-Fall is the descending midpoint crossing before the trough.')
+    st.caption('Both exports include the original 16 kinetic columns plus absolute AP peak and AHP trough voltages (mV), and Group when assigned. Relative timestamps have AP peak = 0 ms; membrane voltages are unchanged. AHP Half-Fall is the descending midpoint crossing before the trough.')
     return saved
 
 
@@ -239,7 +239,7 @@ def render_groups(batch):
     st.subheader('Prototypical AP/AHP waveforms')
     st.plotly_chart(waveform, width='stretch', key='group_prototype')
     st.caption('Schematic curves connect group means of measured landmarks, not averaged raw traces. '
-               'Voltages are relative to AP threshold (0 mV) because the 16-column CSV does not retain absolute threshold voltage. '
+               'Prototypical waveform voltages remain relative to AP threshold (0 mV), even when absolute peak and trough voltages are available. '
                'For three or more groups, the table beneath the waveform identifies every significant '
                'landmark and its specific group pair using the selected p-value correction. '
                'Missing measurements are omitted.')

@@ -1,7 +1,8 @@
 """Landmark-derived schematic AP/AHP profiles (not averaged voltage traces).
 
-The 16-column bulk export carries times and amplitudes but no absolute voltages
-or raw samples. Therefore profiles show mV relative to AP threshold (0 mV).
+The bulk export carries landmark times, relative amplitudes and (in newer
+exports) absolute peak/trough Vm, but not raw samples. Profiles deliberately
+remain relative to AP threshold (0 mV), ignoring absolute Vm columns.
 Each landmark coordinate is the mean of that measurement across cells; PCHIP
 joins them visually but adds no independent observations.
 """

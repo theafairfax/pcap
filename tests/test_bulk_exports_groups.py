@@ -54,6 +54,21 @@ class BulkExportGroupTests(unittest.TestCase):
         self.assertLess(absolute.loc[0, 'AHP Half-Fall (ms)'],
                         absolute.loc[0, 'AHP Location (ms)'])
 
+    def test_peak_and_trough_vm_in_both_exports_and_comparison(self):
+        rows = self.sample_rows()
+        absolute = export_frame(rows)
+        relative = export_frame(rows, relative=True)
+        for column, value in (('AP peak Vm (mV)', 30.), ('AHP trough Vm (mV)', -77.)):
+            self.assertAlmostEqual(absolute.loc[0, column], value, places=1)
+            self.assertAlmostEqual(relative.loc[0, column], value, places=1)
+            self.assertIn(column, COMPARISON_COLUMNS)
+        figures, summary = compare_multiple_groups(rows, {'A': ['0'], 'B': ['1'], 'C': ['2']})
+        for column in ('AP peak Vm (mV)', 'AHP trough Vm (mV)'):
+            plot = figures[COMPARISON_COLUMNS.index(column)]
+            self.assertEqual(len(plot.data), 3)
+            self.assertEqual(plot.layout.yaxis.title.text, column)
+            self.assertEqual(summary.loc[summary['Measure'].eq(column), 'n'].tolist(), [1, 1, 1])
+
     def test_three_groups_and_missing_value(self):
         rows = self.sample_rows()
         rows[2]['AHP Half rise (ms)'] = np.nan
