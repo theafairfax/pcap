@@ -1,8 +1,8 @@
 """Landmark-derived schematic AP/AHP profiles (not averaged voltage traces).
 
-The bulk export carries landmark times, relative amplitudes and (in newer
-exports) absolute peak/trough Vm, but not raw samples. Profiles deliberately
-remain relative to AP threshold (0 mV), ignoring absolute Vm columns.
+The bulk export carries landmark times and relative amplitudes, with absolute
+peak/trough Vm in recent exports. Two representations are supported: relative
+to AP threshold, and raw membrane voltage. No raw trace is reconstructed.
 Each landmark coordinate is the mean of that measurement across cells; PCHIP
 joins them visually but adds no independent observations.
 """
@@ -34,7 +34,18 @@ TEST_MEASURES = {
     'AP peak':'AP amplitude (mV)', 'AHP depth':'AHP amplitude (mV)',
 }
 
-def significant_waveform_pairs(tests, groups, significance_method='Holm-Bonferroni'):
+def waveform_test_measures(voltage_mode='relative'):
+    """Use the same timed hypotheses, but match voltage labels to the y axis."""
+    if voltage_mode == 'relative':
+        return TEST_MEASURES
+    if voltage_mode == 'absolute':
+        return {**TEST_MEASURES, 'AP peak': 'AP peak Vm (mV)',
+                'AHP trough Vm': 'AHP trough Vm (mV)'}
+    raise ValueError('Unknown waveform voltage mode: ' + str(voltage_mode))
+
+
+def significant_waveform_pairs(tests, groups, significance_method='Holm-Bonferroni',
+                               voltage_mode='relative'):
     """Return significant group/landmark tests, using the boxplots' corrected family.
 
     These results describe measured landmarks, not comparisons between fitted
@@ -43,7 +54,8 @@ def significant_waveform_pairs(tests, groups, significance_method='Holm-Bonferro
     if significance_method not in SIGNIFICANCE_METHODS:
         raise ValueError('Unknown significance method.')
     column = SIGNIFICANCE_METHODS[significance_method]
-    relevant = {measure: label for label, measure in TEST_MEASURES.items()}
+    measures = waveform_test_measures(voltage_mode)
+    relevant = {measure: label for label, measure in measures.items()}
     names = set(groups)
     out = []
     for _, result in tests.iterrows():
@@ -61,28 +73,60 @@ def significant_waveform_pairs(tests, groups, significance_method='Holm-Bonferro
             'Adjusted p-value': p,
         })
     return sorted(out, key=lambda r: (
-        list(TEST_MEASURES).index(r['Landmark']),
+        list(measures).index(r['Landmark']),
         list(groups).index(r['Group A']), list(groups).index(r['Group B'])
     ))
 
 
-def group_landmarks(rows, groups):
+def group_landmarks(rows, groups, voltage_mode='relative'):
+    """Group means of measured landmark coordinates; never averaged raw traces.
+
+    The raw Vm representation uses AP onset Vm from the analysis when present,
+    or peak Vm minus threshold-relative AP amplitude for imported CSVs.
+    Raw profiles use complete cases so the three voltage anchors represent
+    the same recordings. Legacy 16-column CSVs cannot supply a raw profile.
+    """
+    if voltage_mode not in ('relative', 'absolute'):
+        raise ValueError('Unknown waveform voltage mode: ' + str(voltage_mode))
     frame = export_frame(rows, relative=True)
-    frame.index = results_frame(rows)['File ID'].astype(str)
+    raw = results_frame(rows)
+    frame.index = raw['File ID'].astype(str)
+    raw.index = frame.index
     data = {}
     for name, ids in groups.items():
-        cohort = frame.loc[list(ids)]
-        ap = pd.to_numeric(cohort['AP amplitude (mV)'], errors='coerce').mean()
-        ahp = pd.to_numeric(cohort['AHP amplitude (mV)'], errors='coerce').mean()
-        if not np.isfinite(ap) or not np.isfinite(ahp) or ap <= 0 or ahp <= 0:
-            continue
+        cohort = frame.loc[list(ids)].copy()
+        if voltage_mode == 'absolute':
+            ap_peak = pd.to_numeric(cohort['AP peak Vm (mV)'], errors='coerce')
+            ap_amplitude = pd.to_numeric(cohort['AP amplitude (mV)'], errors='coerce')
+            trough = pd.to_numeric(cohort['AHP trough Vm (mV)'], errors='coerce')
+            measured_onset = pd.to_numeric(
+                raw.loc[list(ids), 'AP threshold Vm (mV)'], errors='coerce')
+            onset = measured_onset.where(measured_onset.notna(), ap_peak - ap_amplitude)
+            valid = (ap_peak.notna() & ap_amplitude.notna() & trough.notna() &
+                     onset.notna() & (ap_peak > onset) & (trough < onset))
+            if not valid.any():
+                continue
+            cohort = cohort.loc[valid]
+            threshold_vm = float(onset[valid].mean())
+            ap_vm = float(ap_peak[valid].mean())
+            ahp_vm = float(trough[valid].mean())
+        else:
+            ap = pd.to_numeric(cohort['AP amplitude (mV)'], errors='coerce').mean()
+            ahp = pd.to_numeric(cohort['AHP amplitude (mV)'], errors='coerce').mean()
+            if not np.isfinite(ap) or not np.isfinite(ahp) or ap <= 0 or ahp <= 0:
+                continue
         points = []
         for column, factor, label in LANDMARKS:
             x = pd.to_numeric(cohort[column], errors='coerce').mean()
             if np.isfinite(x):
-                points.append((float(x), float(factor*(ap if factor >= 0 else ahp)), label))
-        # Keep chronological order. Coincident markers share one x; avoid
-        # manufacturing an interpolation crossing across duplicate timestamps.
+                if voltage_mode == 'absolute':
+                    # Fraction of the onset-to-peak or onset-to-trough span.
+                    y = (threshold_vm + factor * (ap_vm - threshold_vm)
+                         if factor >= 0 else
+                         threshold_vm - factor * (ahp_vm - threshold_vm))
+                else:
+                    y = factor * (ap if factor >= 0 else ahp)
+                points.append((float(x), float(y), label))
         points.sort(key=lambda item: item[0])
         unique = []
         for point in points:
@@ -93,8 +137,8 @@ def group_landmarks(rows, groups):
             data[name] = unique
     return data
 
-
-def prototype_figure(rows, groups, tests, significance_method='Holm-Bonferroni'):
+def prototype_figure(rows, groups, tests, significance_method='Holm-Bonferroni',
+                     voltage_mode='relative'):
     """Overlay up to six mean-landmark profiles and annotate two-group differences.
 
     Time and voltage marker tests are reused from the *same* corrected family
@@ -102,11 +146,14 @@ def prototype_figure(rows, groups, tests, significance_method='Holm-Bonferroni')
     """
     if significance_method not in SIGNIFICANCE_METHODS:
         raise ValueError('Unknown significance method.')
-    profiles = group_landmarks(rows, groups)
+    profiles = group_landmarks(rows, groups, voltage_mode=voltage_mode)
+    measures = waveform_test_measures(voltage_mode)
+    voltage_label = ('Membrane potential (mV)' if voltage_mode == 'absolute'
+                     else 'Membrane potential relative to AP threshold (mV)')
     # More than two waveforms need a group-pair key INSIDE the downloadable
     # graphic, not unexplained stars near densely overlapping curves.
     pair_rows = significant_waveform_pairs(
-        tests, groups, significance_method) if len(groups) > 2 else []
+        tests, groups, significance_method, voltage_mode=voltage_mode) if len(groups) > 2 else []
     multi = len(groups) > 2
     table_height = max(150, (len(pair_rows) + 1) * 25) if multi else 0
     chart_height = 515
@@ -132,12 +179,12 @@ def prototype_figure(rows, groups, tests, significance_method='Holm-Bonferroni')
         smooth_y = PchipInterpolator(x, y)(smooth_x)
         add_curve(go.Scatter(x=smooth_x, y=smooth_y, mode='lines', name=name,
                                  line=dict(color=color, width=3),
-                                 hovertemplate=name+'<br>t=%{x:.3f} ms<br>relative Vm=%{y:.2f} mV<extra></extra>'))
+                                 hovertemplate=name+'<br>t=%{x:.3f} ms<br>Vm=%{y:.2f} mV<extra></extra>'))
         add_curve(go.Scatter(x=x, y=y, mode='markers', name=name+' landmarks',
                                  marker=dict(color=color, size=9, line=dict(color='white',width=1)),
                                  text=[p[2] for p in points],
                                  customdata=np.array([[len(groups[name])]]*len(points)),
-                                 hovertemplate='%{text}<br>t=%{x:.3f} ms<br>relative Vm=%{y:.2f} mV<extra></extra>',
+                                 hovertemplate='%{text}<br>t=%{x:.3f} ms<br>Vm=%{y:.2f} mV<extra></extra>',
                                  showlegend=False))
         point_lookup[name] = {p[2]: p for p in points}
     # Significance stars use the specified p-value adjustment. They live
@@ -147,11 +194,11 @@ def prototype_figure(rows, groups, tests, significance_method='Holm-Bonferroni')
         column = SIGNIFICANCE_METHODS[significance_method]
         finite_y = [p[1] for v in profiles.values() for p in v]
         pad = max(3., (max(finite_y)-min(finite_y))*.08) if finite_y else 4.
-        for label, measure in TEST_MEASURES.items():
+        for label, measure in measures.items():
             match = tests.loc[tests['Measure'].eq(measure) &
                               tests['Group A'].eq(group_names[0]) &
                               tests['Group B'].eq(group_names[1])]
-            point_label = 'AHP trough' if label == 'AHP depth' else label
+            point_label = 'AHP trough' if label in ('AHP depth', 'AHP trough Vm') else label
             if match.empty or point_label not in point_lookup[group_names[0]] or point_label not in point_lookup[group_names[1]]:
                 continue
             p = float(match.iloc[0][column])
@@ -159,9 +206,9 @@ def prototype_figure(rows, groups, tests, significance_method='Holm-Bonferroni')
                 continue
             a, b = point_lookup[group_names[0]][point_label], point_lookup[group_names[1]][point_label]
             # Horizontal timing offset or vertical voltage difference.
-            is_voltage = measure.endswith('amplitude (mV)')
+            is_voltage = measure.endswith('(mV)')
             xx = (a[0]+b[0])/2
-            yy = max(a[1],b[1])+pad*(1.1 if label == 'AP peak' else (-.7 if label == 'AHP depth' else .45))
+            yy = max(a[1],b[1])+pad*(1.1 if label == 'AP peak' else (-.7 if label in ('AHP depth', 'AHP trough Vm') else .45))
             fig.add_annotation(x=xx,y=yy,text=significance_label(p),
                                showarrow=False,font=dict(size=15,color='#111827'),
                                hovertext=f'{label}: {significance_method}; p={p:.4g}')
@@ -195,11 +242,12 @@ def prototype_figure(rows, groups, tests, significance_method='Holm-Bonferroni')
     else:
         fig.add_vline(x=0, line=dict(color='#94a3b8', dash='dash', width=1))
         fig.add_hline(y=0, line=dict(color='#94a3b8', dash='dot', width=1))
-    fig.update_layout(title='Prototypical AP/AHP by group · mean kinetic landmarks',
+    fig.update_layout(title=('Absolute membrane-voltage' if voltage_mode == 'absolute' else 'AP threshold-normalized') + ' prototypical AP/AHP · mean landmarks',
                       template='plotly_white',height=(chart_height + table_height + 70 if multi else 530),
                       margin=dict(l=55,r=30,t=65,b=95),
                       xaxis_title='Time relative to AP peak (ms)',
-                      yaxis_title='Membrane potential relative to AP threshold (mV)',
+                      yaxis_title=voltage_label,
+                      meta={'voltage_mode': voltage_mode},
                       legend=dict(orientation='h',y=1.08 if not multi else 1.02),
                       annotations=list(fig.layout.annotations or []))
     return fig
