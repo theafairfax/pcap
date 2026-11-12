@@ -39,7 +39,9 @@ def waveform_test_measures(voltage_mode='relative'):
     if voltage_mode == 'relative':
         return TEST_MEASURES
     if voltage_mode == 'absolute':
-        return {**TEST_MEASURES, 'AP peak': 'AP peak Vm (mV)',
+        return {**{label: metric for label, metric in TEST_MEASURES.items()
+                   if label not in ('AP peak', 'AHP depth')},
+                'AP peak': 'AP peak Vm (mV)',
                 'AHP trough Vm': 'AHP trough Vm (mV)'}
     raise ValueError('Unknown waveform voltage mode: ' + str(voltage_mode))
 
