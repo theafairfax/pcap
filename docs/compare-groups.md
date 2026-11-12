@@ -16,3 +16,22 @@ Where supported, plots report two-sided Welch-test p-values and Holm-adjusted p-
 Compare Groups accepts 2–6 named groups. The group-count selector automatically expands to match group IDs found in the current bulk results or an imported PCAP kinetics CSV. Previously exported two-group CSVs and legacy `True`/`False` group values remain supported. File assignments can also be changed manually; each recording belongs to at most one group.
 
 Every metric provides one boxplot per active group and pairwise Welch comparisons for all group pairs (up to 15 pairs with six groups). Benjamini–Hochberg and Holm adjustments apply across all tested metrics and group pairs. **Prototypical AP/AHP waveforms** overlay up to six landmark-derived curves, each aligned at its AP peak (t = 0); these schematics are *not* averages of raw voltage traces. Two-group waveforms show significance annotations. Three-to-six-group waveforms include a labeled significance table directly beneath the overlaid traces that identifies each significant group pair, landmark, asterisks, and selected adjusted p-value. Combined PNG/PDF plots preserve all pairwise brackets and provide a separate readable Welch/BH/Holm table under every boxplot, rather than overlapping captions. Standalone waveform PNG and combined PNG/PDF exports include all overlaid curves.
+
+## Analysis results organized into three tabs
+
+After **Analyze**, results are displayed in **Protowaveform**, **Kinetics Measurements**, and **Voltage Measurements** tabs. Kinetics plots are measured in milliseconds (including times relative to the AP peak and durations), while voltage plots are measured in millivolts (including threshold-relative AP/AHP amplitudes and absolute peak/trough Vm). Each collection of boxplots has its own downloadable combined PNG and PDF. The numerical pairwise tests and summary CSVs remain downloadable beneath the tabs.
+
+The **Protowaveform** tab provides two independent landmark-derived visualizations:
+
+- **Threshold-normalized:** AP onset is defined as 0 mV; group-mean AP amplitude and positive AHP depth determine the heights, as in earlier versions.
+- **Raw membrane voltage:** Uses group-mean AP onset voltage, raw AP peak voltage, and raw AHP trough voltage as voltage anchors, with intermediate landmark voltages interpolated between them. To avoid mixing missing values into different anchors, only recordings with all three voltages contribute to a raw-voltage profile. From older CSV files lacking raw voltage fields, this profile is unavailable and never fabricated.
+
+In both visualizations, timing is anchored to each AP peak at 0 ms. Curves are shape-preserving interpolations of mean landmarks, **not** averages of sampled ABF traces. The two visualizations have separate downloadable PNGs. Voltage significance annotations are matched to the plot's own voltage units: threshold-relative amplitude tests on the normalized figure, raw Vm tests on the raw figure.
+
+## AHP trough resolution as a categorical outcome
+
+Under **Voltage Measurements**, a stacked-percentage chart shows the counts and percentages of AP-positive recordings in each group with **resolved** and **unresolved** AHP troughs. A resolved trough requires a valid AHP trough location and depth; full AHP recovery/half-width is not required. No-AP files and processing errors are excluded from the denominator and explicitly counted as exclusions.
+
+The omnibus **Pearson chi-squared** test compares the group-by-resolution contingency table; the results report its degrees of freedom, p-value, and smallest expected cell count. When the table is 2×2 and expected counts are under five, **Fisher's exact** p-value is also given because chi-squared's approximation can be unreliable. When a group has no eligible files, or only one resolution outcome appears across all groups, the chi-squared p-value is unavailable. For 3–6 groups with sparse cells, seek an exact or Monte Carlo contingency test before interpreting significance.
+
+**Important:** an unresolved trough means the algorithm could not identify a trough using the configured bounds and settings, **not** proof that the neuron lacks an afterhyperpolarization. The proportions are sensitive to the detection window, filtering, and recording quality, and the tests assume independent recordings.
