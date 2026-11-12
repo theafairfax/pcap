@@ -95,10 +95,13 @@ def _draw_waveform(ax, waveform):
                     fontsize=12, ha="center", fontweight="bold")
     ax.axvline(0, color="#94a3b8", linestyle="--", lw=.9)
     ax.axhline(0, color="#94a3b8", linestyle=":", lw=.9)
-    ax.set_title("Prototypical AP/AHP by group (mean landmarks)",
+    mode = (getattr(waveform.layout, 'meta', None) or {}).get('voltage_mode', 'relative')
+    ax.set_title("Raw membrane-voltage protowaveforms" if mode == "absolute"
+                 else "Threshold-normalized protowaveforms",
                  fontsize=11, fontweight="bold", loc="left")
     ax.set_xlabel("Time from AP peak (ms)")
-    ax.set_ylabel("Relative to AP threshold (mV)")
+    ax.set_ylabel("Membrane potential (mV)" if mode == "absolute"
+                  else "Relative to AP threshold (mV)")
     ax.grid(alpha=.18)
     ax.legend(fontsize=9, loc="best")
     ax.text(.5, -.21, "Schematic interpolation of mean landmarks; not averaged raw voltage traces.",
