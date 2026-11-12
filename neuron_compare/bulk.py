@@ -75,7 +75,6 @@ def results_frame(rows):
 # then append raw absolute membrane voltages for the AP peak and AHP trough.
 VOLTAGE_EXPORT_COLUMNS = ['AP peak Vm (mV)', 'AHP trough Vm (mV)']
 LEGACY_EXPORT_COLUMNS = [
-EXPORT_COLUMNS = [
     'Filename', 'Sampling Rate (Hz)', 'Sweep', 'AP Location (ms)',
     'AP Onset (ms)', 'AP Rise 10% (ms)', 'AP Rise 90% (ms)',
     'AP rise time (ms)', 'AP Half rise (ms)', 'AP Half fall (ms)',
