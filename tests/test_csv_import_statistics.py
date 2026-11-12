@@ -26,6 +26,8 @@ def make_row(index, offset=0.):
         'AHP Half rise (ms)': 251. + offset,
         'AP Amplitude from AP threshold (mV)': 90. + index,
         'AHP Amplitude from AP threshold (mV)': -(15. + index),
+        'AP Peak Vm (mV)': 30. + index,
+        'AHP Trough Vm (mV)': -75. - index,
     })
     return record
 
@@ -43,6 +45,19 @@ class SavedResultsTests(unittest.TestCase):
             self.assertAlmostEqual(rows[0]['AHP Half rise (ms)'],
                                    exported.iloc[0]['AHP Half-Fall (ms)'])
             self.assertAlmostEqual(rows[0]['AHP Amplitude from AP threshold (mV)'], -15.)
+            self.assertAlmostEqual(rows[0]['AP Peak Vm (mV)'], 30.)
+            self.assertAlmostEqual(rows[0]['AHP Trough Vm (mV)'], -75.)
+
+    def test_legacy_csv_without_voltage_fields_is_still_importable(self):
+        from neuron_compare.bulk import LEGACY_EXPORT_COLUMNS
+        previous = export_frame([make_row(0), make_row(1)])[LEGACY_EXPORT_COLUMNS]
+        loaded, _ = import_kinetics_csv(previous.to_csv(index=False).encode())
+        self.assertEqual(loaded[0]['Status'], 'OK')
+        self.assertTrue(np.isnan(loaded[0]['AP Peak Vm (mV)']))
+        self.assertTrue(np.isnan(loaded[0]['AHP Trough Vm (mV)']))
+        plotted, _ = compare_multiple_groups(loaded, {'A': [loaded[0]['File ID']], 'B': [loaded[1]['File ID']]})
+        self.assertEqual(len(plotted), len(COMPARISON_COLUMNS))
+        self.assertEqual(len(plotted[COMPARISON_COLUMNS.index('AP peak Vm (mV)')].data[0].y), 0)
 
     def test_group_plots_show_p_values(self):
         records = [make_row(i, offset=float(i*10)) for i in range(6)]

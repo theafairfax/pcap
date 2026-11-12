@@ -21,6 +21,8 @@ def example(i, group):
         'AHP Location (ms)': 102+i*10,
         'AP Amplitude from AP threshold (mV)': 90+20*group+i%2,
         'AHP Amplitude from AP threshold (mV)': -(12+5*group+i%2),
+        'AP Peak Vm (mV)': 25 + group * 3,
+        'AHP Trough Vm (mV)': -75 - group * 2,
     })
     return r
 
@@ -40,7 +42,7 @@ class GroupedWaveformTests(unittest.TestCase):
         imported,basis=import_kinetics_csv(grouped.to_csv(index=False).encode())
         self.assertEqual(basis,'Relative')
         self.assertEqual([r['Group'] for r in imported], ['0']*3+['1']*3)
-        self.assertEqual(len(export_frame(imported).columns),16)
+        self.assertEqual(len(export_frame(imported).columns),18)
         grouped.loc[0,'Group']='other'
         with self.assertRaisesRegex(ValueError,'Group must'):
             import_kinetics_csv(grouped.to_csv(index=False).encode())
@@ -53,6 +55,11 @@ class GroupedWaveformTests(unittest.TestCase):
         self.assertAlmostEqual(control['AP peak'][1],np.mean([90,91,90]))
         self.assertAlmostEqual(control['AHP trough'][1],-np.mean([12,13,12]))
         self.assertAlmostEqual(control['AP onset'][0],-.5)
+        # Absolute Vm columns must not affect schematic threshold-relative heights.
+        for row in self.rows:
+            row['AP Peak Vm (mV)'] = 1000.
+            row['AHP Trough Vm (mV)'] = -1000.
+        self.assertEqual(profiles, group_landmarks(self.rows, self.groups))
 
     def test_prototype_exports(self):
         tests=pairwise_statistics(self.rows,self.groups)

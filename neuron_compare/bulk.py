@@ -71,7 +71,10 @@ def results_frame(rows):
     return pd.DataFrame(rows, columns=COLUMNS)
 
 
-# Publication-oriented 16-column export schema from the supplied worksheet.
+# Publication-oriented export schema. Keep the original 16 fields in order,
+# then append raw absolute membrane voltages for the AP peak and AHP trough.
+VOLTAGE_EXPORT_COLUMNS = ['AP peak Vm (mV)', 'AHP trough Vm (mV)']
+LEGACY_EXPORT_COLUMNS = [
 EXPORT_COLUMNS = [
     'Filename', 'Sampling Rate (Hz)', 'Sweep', 'AP Location (ms)',
     'AP Onset (ms)', 'AP Rise 10% (ms)', 'AP Rise 90% (ms)',
@@ -79,6 +82,7 @@ EXPORT_COLUMNS = [
     'AP Half width (ms)', 'AHP Location (ms)', 'AHP Onset (ms)',
     'AHP Half-Fall (ms)', 'AP amplitude (mV)', 'AHP amplitude (mV)',
 ]
+EXPORT_COLUMNS = LEGACY_EXPORT_COLUMNS + VOLTAGE_EXPORT_COLUMNS
 # Only coordinate timestamps are shifted; elapsed durations and voltages are not.
 EXPORT_TIMES = [
     'AP Location (ms)', 'AP Onset (ms)', 'AP Rise 10% (ms)',
@@ -111,6 +115,8 @@ def export_frame(rows, relative=False, include_groups=False):
         # Descending midpoint between onset/threshold and trough; this does
         # not require AHP recovery. The legacy internal name is Half rise.
         'AHP Half-Fall (ms)': 'AHP Half rise (ms)',
+        'AP peak Vm (mV)': 'AP Peak Vm (mV)',
+        'AHP trough Vm (mV)': 'AHP Trough Vm (mV)',
         'AP amplitude (mV)': 'AP Amplitude from AP threshold (mV)',
         # Report positive hyperpolarization depth (threshold - trough).
         'AHP amplitude (mV)': 'AHP Amplitude from AP threshold (mV)',
@@ -134,7 +140,7 @@ def export_frame(rows, relative=False, include_groups=False):
 
 
 def import_kinetics_csv(data, filename='previous_export.csv', timing='Auto'):
-    """Parse the 16-column PCAP export as an in-memory comparison batch.
+    """Parse legacy 16-column and new 18-column PCAP kinetics exports.
 
     Imports never re-run electrophysiology extraction. Absolute timestamps
     are converted to AP-peak-relative only when producing comparisons.
@@ -149,7 +155,9 @@ def import_kinetics_csv(data, filename='previous_export.csv', timing='Auto'):
     source.columns = [str(c).strip() for c in source.columns]
     if source.columns.duplicated().any():
         raise ValueError('CSV contains duplicate column names.')
-    missing = [name for name in EXPORT_COLUMNS if name not in source]
+    # Older PCAP exports lack raw Vm: keep them importable, but do not
+    # fabricate absolute voltages from amplitudes without a threshold Vm.
+    missing = [name for name in LEGACY_EXPORT_COLUMNS if name not in source]
     if missing:
         raise ValueError('Missing required PCAP export columns: ' + ', '.join(missing))
     group_values = None
@@ -170,7 +178,7 @@ def import_kinetics_csv(data, filename='previous_export.csv', timing='Auto'):
     actual_basis = inferred if timing == 'Auto' else timing
     numeric = {}
     for col in EXPORT_COLUMNS:
-        if col != 'Filename':
+        if col != 'Filename' and col in source:
             numeric[col] = pd.to_numeric(source[col], errors='coerce')
             nonblank = source[col].notna() & source[col].astype(str).str.strip().ne('')
             invalid = nonblank & numeric[col].isna()
@@ -191,6 +199,8 @@ def import_kinetics_csv(data, filename='previous_export.csv', timing='Auto'):
         # Descending AHP crossing is stored under the legacy measurement key.
         'AHP Half-Fall (ms)': 'AHP Half rise (ms)',
         'AP amplitude (mV)': 'AP Amplitude from AP threshold (mV)',
+        'AP peak Vm (mV)': 'AP Peak Vm (mV)',
+        'AHP trough Vm (mV)': 'AHP Trough Vm (mV)',
     }
     for position in range(len(source)):
         row = dict.fromkeys(COLUMNS, np.nan)
@@ -205,10 +215,10 @@ def import_kinetics_csv(data, filename='previous_export.csv', timing='Auto'):
         if group_values is not None:
             row['Group'] = group_values.iloc[position]
         for key, dest in column_map.items():
-            row[dest] = numeric[key].iloc[position]
+            row[dest] = numeric[key].iloc[position] if key in numeric else np.nan
         depth = numeric['AHP amplitude (mV)'].iloc[position]
         row['AHP Amplitude from AP threshold (mV)'] = -depth if pd.notna(depth) else np.nan
-        if any(pd.isna(numeric[k].iloc[position]) for k in COMPARISON_COLUMNS):
+        if any(pd.isna(numeric[k].iloc[position]) for k in LEGACY_EXPORT_COLUMNS if k in COMPARISON_COLUMNS):
             row['Status'] = 'Partial'
         rows.append(row)
     return rows, actual_basis
