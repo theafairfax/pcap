@@ -46,8 +46,9 @@ def render_bulk():
         recovery = st.number_input('Bulk captured recovery after AP peak (ms)',min_value=1.,value=100.,
                                    help='Maximum post-peak search/capture duration; stops at the next AP or recording boundary.')
         trough_window = st.number_input('Bulk AHP trough search after AP half-fall (ms)',
-                                        min_value=1.,max_value=100.,value=10.,step=1.,
-                                        help='Search for the AHP minimum beyond AP half-fall. Increase for slower AHPs, but inspect late minima to avoid including slow drift.')
+                                        min_value=1.,max_value=Settings.ahp_trough_window_ms,
+                                        value=Settings.ahp_trough_window_ms,step=1.,
+                                        help='Search up to 30 ms after AP half-fall (the shared maximum). Shorter windows exclude later minima; inspect late troughs for slow drift.')
         post_injection = st.checkbox('Allow AHP recovery after injection ends', value=True,
                                      help='Use recorded post-step voltage to measure the AHP, without including later action potentials.')
         manual = st.checkbox('Set bulk injection window manually')
