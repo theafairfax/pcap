@@ -52,7 +52,7 @@ class SupabaseTests(unittest.TestCase):
             result=catalog('https://example.supabase.co','public')
         self.assertEqual(len(result),501)
         from urllib.parse import unquote
-        self.assertIn('analysis_version=in.(first-event-1.1,first-event-1.0)',unquote(req.call_args_list[0].args[2]))
+        self.assertIn('analysis_version=in.(first-event-1.4,first-event-1.3,first-event-1.1,first-event-1.0)',unquote(req.call_args_list[0].args[2]))
         self.assertIn('offset=500',req.call_args_list[1].args[2])
         event=allen_event(3)
         with patch('neuron_compare.supabase_library.request',return_value=encode_event(event)) as req:
