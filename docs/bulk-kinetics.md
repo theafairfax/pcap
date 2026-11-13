@@ -19,3 +19,11 @@ The bulk workflow also reports processing status to help identify recordings req
 ## Optional group assignment (2–6 groups)
 
 Enable **Assign groups during upload** and select the number of groups (2 through 6). Each group gets its own ABF/AXGD/AXGX upload box. Absolute and AP-peak-relative CSV exports then include a **Group** column with zero-based IDs (`0`–`5`). Without this option, the exports contain 18 columns (the original 16 plus the two membrane voltages). Open Compare Groups to use the preassigned recordings automatically.
+
+## Average resting membrane potential and voltage baselines
+
+**Average RMP (mV)** is calculated by averaging voltage samples strictly **before current-injection onset in each sweep**, then giving each qualifying sweep equal weight in a recording-wide mean. Onset is derived from the current-command/current-monitor trace. A sweep without an identifiable step (including a zero-current sweep) can use the median step onset from other sweeps; the manually specified injection start overrides these values. If neither identifiable step nor manual start is available, RMP remains blank instead of being inferred from arbitrary samples. **RMP sweeps used** reports the number of qualifying sweeps.
+
+**AP onset Vm (mV)** is the raw voltage at the configured dV/dt threshold. It is distinct from average RMP. Existing AP amplitude is AP peak minus AP onset Vm; positive AHP amplitude is AP onset Vm minus AHP trough Vm. New RMP-relative values are **signed**: AP peak minus average RMP and AHP trough minus average RMP. These values are unchanged between absolute and relative timestamp exports.
+
+Previously generated CSVs remain readable for available measures, but missing pre-injection RMP cannot be reconstructed from scalar kinetics. Reprocess raw recordings to populate all eight comparison panels.
