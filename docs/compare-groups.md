@@ -35,3 +35,9 @@ Under **Voltage Measurements**, a stacked-percentage chart shows the counts and 
 The omnibus **Pearson chi-squared** test compares the group-by-resolution contingency table; the results report its degrees of freedom, p-value, and smallest expected cell count. When the table is 2×2 and expected counts are under five, **Fisher's exact** p-value is also given because chi-squared's approximation can be unreliable. When a group has no eligible files, or only one resolution outcome appears across all groups, the chi-squared p-value is unavailable. For 3–6 groups with sparse cells, seek an exact or Monte Carlo contingency test before interpreting significance.
 
 **Important:** an unresolved trough means the algorithm could not identify a trough using the configured bounds and settings, **not** proof that the neuron lacks an afterhyperpolarization. The proportions are sensitive to the detection window, filtering, and recording quality, and the tests assume independent recordings.
+
+## Voltage Measurements order
+
+The eight voltage panels appear in this order: (1) Average RMP (raw mV), (2) AP onset Vm (raw mV), (3) AP peak Vm (raw mV), (4) AHP trough Vm (raw mV), (5) AP peak above AP onset (positive mV), (6) AHP trough depth below AP onset (positive mV), (7) AP peak minus average RMP (signed mV), and (8) AHP trough minus average RMP (signed mV). Multiplicity corrections span the numerical comparisons and all group pairs.
+
+Each boxplot contributes **one recording**, not each sweep used to estimate that recording's RMP. Missing RMPs are excluded only from RMP-dependent panels. Older CSVs without these values can show empty panels; process the original recordings for complete values.
