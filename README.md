@@ -360,3 +360,7 @@ After **Analyze**, select **Download all box plots as PNG** to save a single
 high-resolution contact sheet containing all comparisons, group colors,
 and p-value labels. This export uses Matplotlib on the server; unlike Plotly
 image export it does not require Kaleido or a headless Chrome installation.
+
+## Extended voltage measurements (Bulk Kinetics)
+
+The bulk CSV now includes **average pre-injection RMP**, **AP onset Vm**, raw AP peak/trough Vm, and signed peak/trough differences from average RMP, plus the count of sweeps contributing to the RMP estimate. Each sweep contributes its mean pre-injection voltage and those values are averaged equally. Injection onset comes from current traces or manual selection; where reliable injection timing is absent, RMP-related values remain missing. Compare Groups shows eight panels in the order RMP, onset, raw AP/AHP, onset-relative AP/AHP, and RMP-relative AP/AHP. Older exports remain importable but cannot recover missing RMP; reprocess original recordings for complete comparisons.

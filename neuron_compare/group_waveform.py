@@ -101,9 +101,11 @@ def group_landmarks(rows, groups, voltage_mode='relative'):
             ap_peak = pd.to_numeric(cohort['AP peak Vm (mV)'], errors='coerce')
             ap_amplitude = pd.to_numeric(cohort['AP amplitude (mV)'], errors='coerce')
             trough = pd.to_numeric(cohort['AHP trough Vm (mV)'], errors='coerce')
-            measured_onset = pd.to_numeric(
+            measured_onset = pd.to_numeric(cohort['AP onset Vm (mV)'], errors='coerce')
+            fallback_onset = pd.to_numeric(
                 raw.loc[list(ids), 'AP threshold Vm (mV)'], errors='coerce')
-            onset = measured_onset.where(measured_onset.notna(), ap_peak - ap_amplitude)
+            onset = measured_onset.where(measured_onset.notna(), fallback_onset)
+            onset = onset.where(onset.notna(), ap_peak - ap_amplitude)
             valid = (ap_peak.notna() & ap_amplitude.notna() & trough.notna() &
                      onset.notna() & (ap_peak > onset) & (trough < onset))
             if not valid.any():
