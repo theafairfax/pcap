@@ -32,6 +32,8 @@ These measures are sensitive to baseline choice, injection protocol, filters, sa
 
 Average pre-injection RMP is recording-wide: the mean voltage before current injection is calculated for each qualifying sweep, then those sweep means are averaged with equal weight:
 
-\\[\\overline{RMP} = \\frac{1}{N}\\sum_{s=1}^{N}\\bar V_{s,pre}.\\]
+\[
+\overline{RMP} = \frac{1}{N}\sum_{s=1}^{N}\bar V_{s,pre}.
+\]
 
 AP onset Vm is the voltage sampled at dV/dt-defined onset, and **is not** resting potential. The eight voltage measures consist of raw RMP, onset, AP peak and AHP trough, onset-referenced differences (AP peak − onset; onset − AHP trough as positive depth), and signed RMP differences (AP peak − RMP; AHP trough − RMP). A negative RMP-referenced trough means hyperpolarization relative to resting voltage.
