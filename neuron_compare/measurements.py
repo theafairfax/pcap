@@ -6,6 +6,9 @@ See README for definitions and provenance.
 import numpy as np
 from scipy.signal import find_peaks
 
+# Shared maximum AHP trough-search interval for all analysis workflows.
+MAX_AHP_TROUGH_WINDOW_MS = 30.
+
 
 def crossing(t, v, level, start, stop, rising):
     for j in range(max(0, start), min(stop, len(v) - 1)):
@@ -22,7 +25,7 @@ def detect_peaks(t, v, height=-10., prominence=20., separation_ms=2.):
 
 def analyze_events(t, v, start_s, end_s, height=-10., prominence=20.,
                    separation_ms=2., dvdt_threshold=20., ahp_window_ms=50.,
-                   ahp_trough_window_ms=3., ahp_post_injection=False):
+                   ahp_trough_window_ms=MAX_AHP_TROUGH_WINDOW_MS, ahp_post_injection=False):
     t = np.asarray(t, dtype=float)
     v = np.asarray(v, dtype=float)
     if len(t) < 3 or len(t) != len(v) or not np.all(np.isfinite(v)):
@@ -30,8 +33,10 @@ def analyze_events(t, v, start_s, end_s, height=-10., prominence=20.,
     dt = float(np.median(np.diff(t)))
     if dt <= 0 or start_s >= end_s:
         raise ValueError("Use increasing time and a nonempty analysis window.")
-    if ahp_window_ms <= 0 or ahp_trough_window_ms <= 0:
-        raise ValueError('AHP search and recovery windows must be positive.')
+    if ahp_window_ms <= 0:
+        raise ValueError('AHP recovery window must be positive.')
+    if not 0 < ahp_trough_window_ms <= MAX_AHP_TROUGH_WINDOW_MS:
+        raise ValueError('AHP trough search window must be greater than 0 and at most 30 ms.')
     tm = t * 1000.
     dv = np.gradient(v, tm)
     peaks = detect_peaks(t, v, height, prominence, separation_ms)

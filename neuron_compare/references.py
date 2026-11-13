@@ -3,7 +3,9 @@ import json
 from pathlib import Path
 import numpy as np
 from .core import ANALYSIS_VERSION, LEGACY_ANALYSIS_VERSION
-from .measurements import analyze_events
+from .measurements import analyze_events, MAX_AHP_TROUGH_WINDOW_MS
+
+SUPPORTED_REFERENCE_VERSIONS = (ANALYSIS_VERSION, 'first-event-1.3', 'first-event-1.1', LEGACY_ANALYSIS_VERSION)
 
 
 def clean(value):
@@ -35,7 +37,7 @@ def parse_collection(data):
     events = data.get('events', [])
     ids = set()
     for event in events:
-        if event.get('analysis_version') not in (ANALYSIS_VERSION, 'first-event-1.1', LEGACY_ANALYSIS_VERSION):
+        if event.get('analysis_version') not in SUPPORTED_REFERENCE_VERSIONS:
             raise ValueError('Reference measurements use a different analysis version; regenerate the collection.')
         event['time_ms'] = np.asarray(event['time_ms'], dtype=float)
         event['voltage_mv'] = np.asarray(event['voltage_mv'], dtype=float)
@@ -43,15 +45,13 @@ def parse_collection(data):
         if t.ndim != 1 or v.shape != t.shape or len(t) < 3 or not np.all(np.isfinite(t)) or not np.all(np.isfinite(v)) or not np.all(np.diff(t) > 0):
             raise ValueError('Reference waveform must contain finite, increasing time and matching voltage.')
         event['measurements'] = {k: np.nan if value is None else value for k,value in event['measurements'].items()}
-        if event['analysis_version'] == 'first-event-1.1':
-            # Identical legacy defaults; the new analysis options are opt-in.
-            event['settings'].setdefault('ahp_trough_window_ms', 3.)
-            event['settings'].setdefault('ahp_post_injection', False)
-            event['analysis_version'] = ANALYSIS_VERSION
-        if event['analysis_version'] == LEGACY_ANALYSIS_VERSION:
-            # Legacy captures retain the AP and recovery samples needed for the new cutoff.
+        if event['analysis_version'] != ANALYSIS_VERSION:
+            # Re-evaluate legacy captures using the shared 30 ms trough rule.
+            # Stored captures may end sooner; do not extrapolate missing samples.
             settings = dict(event['settings'])
             settings.pop('start_ms', None); settings.pop('end_ms', None)
+            settings['ahp_trough_window_ms'] = MAX_AHP_TROUGH_WINDOW_MS
+            settings.setdefault('ahp_post_injection', False)
             meta = event['metadata']
             lo = max(t[0]/1000., meta.get('injection_start_ms', t[0])/1000.)
             hi = min(t[-1]/1000., meta.get('injection_end_ms', t[-1])/1000.)
@@ -59,6 +59,8 @@ def parse_collection(data):
             if not rows:
                 raise ValueError('Legacy reference has no detectable AP; regenerate the collection.')
             event['measurements'] = rows[0]
+            event['settings']['ahp_trough_window_ms'] = MAX_AHP_TROUGH_WINDOW_MS
+            event['settings'].setdefault('ahp_post_injection', False)
             event['analysis_version'] = ANALYSIS_VERSION
 
         uid = event['metadata']['id']

@@ -89,22 +89,35 @@ class CoreTests(unittest.TestCase):
 
     def test_ahp_trough_uses_half_fall_cutoff_but_retains_recovery(self):
         t=np.arange(0.,.1,.00002)
-        # A fast AHP at 22 ms followed by a deeper, unrelated dip at 35 ms.
-        v=np.interp(t*1000,[0,18,19,20,21,22,28,35,45,100],
+        # Fast AHP at 22 ms, followed by a deeper dip beyond the 30 ms cutoff.
+        v=np.interp(t*1000,[0,18,19,20,21,22,28,65,80,100],
                     [-65,-65,-60,30,-65,-75,-65,-85,-65,-65])
         event=first_event(Sweep(0,t,v))
         r=event['measurements']
         self.assertAlmostEqual(r['AHP Location (ms)'],22.)
-        self.assertAlmostEqual(r['AHP trough search end (ms)'],r['SPIKE Half fall (ms)']+3.)
-        self.assertLessEqual(r['AHP Location (ms)'],r['SPIKE Half fall (ms)']+3.)
-        # Recovery measurements and stored capture can extend past the trough-search cutoff.
-        self.assertGreater(r['AHP Half fall (ms)'],r['AHP trough search end (ms)'])
-        self.assertGreater(event['time_ms'][-1],35.)
-        # With only a late trough, report unresolved instead of selecting it.
-        v=np.interp(t*1000,[0,18,19,20,21,35,45,100],
+        self.assertAlmostEqual(r['AHP trough search end (ms)'],r['SPIKE Half fall (ms)']+30.)
+        self.assertLessEqual(r['AHP Location (ms)'],r['AHP trough search end (ms)'])
+        self.assertGreater(event['time_ms'][-1],r['AHP trough search end (ms)'])
+        # Only a post-cutoff minimum: unresolved.
+        v=np.interp(t*1000,[0,18,19,20,21,65,80,100],
                     [-65,-65,-60,30,-65,-85,-65,-65])
         r=first_event(Sweep(0,t,v))['measurements']
         self.assertTrue(np.isnan(r['AHP Location (ms)']))
+
+    def test_v13_reference_remeasured_to_30_ms_rule(self):
+        t=np.arange(0.,.08,.00002)
+        v=np.interp(t*1000,[0,18,19,20,21,23,27,32,45,80],
+                    [-65,-65,-60,30,-60,-68,-73,-78,-70,-65])
+        event=first_event(Sweep(0,t,v),metadata={'id':'old-30ms'})
+        event['analysis_version']='first-event-1.3'
+        event['settings']['ahp_trough_window_ms']=3.
+        event['measurements']['AHP Location (ms)']=np.nan
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'old-reference.json'
+            save_collection(path,[event])
+            restored=load_collection(path)[0]
+        self.assertEqual(restored['settings']['ahp_trough_window_ms'],30.)
+        self.assertAlmostEqual(restored['measurements']['AHP Location (ms)'],32.,places=1)
 
     def test_legacy_reference_is_remeasured_with_new_ahp_rule(self):
         from neuron_compare.core import ANALYSIS_VERSION, LEGACY_ANALYSIS_VERSION

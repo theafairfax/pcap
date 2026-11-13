@@ -27,6 +27,8 @@ class BulkUITests(unittest.TestCase):
         with patch('streamlit.file_uploader',side_effect=uploader),patch('neuron_compare.bulk.load_recording',side_effect=load):
             app=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py'),default_timeout=30).run()
             self.assertEqual([tab.label for tab in app.tabs],['Kinetics Visualizer','Bulk Kinetics','Compare Groups'])
+            self.assertEqual(next(w for w in app.number_input
+                                  if w.label=='Bulk AHP trough search after AP half-fall (ms)').value,30.)
             next(b for b in app.button if b.label=='Process files').click().run()
             self.assertEqual(len(app.exception),0)
             rows=app.session_state['bulk_results']['rows']
