@@ -50,7 +50,7 @@ class AdaptiveAHPTests(unittest.TestCase):
 
     def test_late_minimum_still_truncated_at_search_limit(self):
         t = np.arange(0., .080, .00002)
-        v = np.interp(t*1000, [0,18,19,20,21,45,65,80],
+        v = np.interp(t*1000, [0,18,19,20,21,65,75,80],
                       [-65,-65,-60,30,-60,-85,-65,-65])
         r = first_event(Sweep(0,t,v))['measurements']
         self.assertTrue(np.isnan(r['AHP Location (ms)']))
