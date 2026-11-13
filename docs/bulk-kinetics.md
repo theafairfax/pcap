@@ -9,6 +9,8 @@ After processing, download one of two concise kinetics exports:
 
 Each export contains the original 16 fields plus **AP peak Vm (mV)** and **AHP trough Vm (mV)**. These two fields are the directly sampled, absolute membrane voltages; unlike the landmark timestamps, they are **identical in both exports**. AP amplitude remains peak minus AP threshold, and AHP amplitude remains the positive depth from AP threshold to the trough. Older 16-column CSVs are still importable, with unavailable absolute voltages left blank.
 
+The AHP trough search defaults to **30 ms after AP half-fall** (also the maximum), matching Kinetics Visualizer. Bulk Kinetics allows a shorter cutoff, down to 1 ms. The search can stop earlier at the next AP or a recording/capture boundary; bulk can optionally include post-injection samples. Inspect late troughs for slow drift.
+
 Time *durations*, including rise times and half-width, are unchanged between exports. Both exports include identifiers and electrophysiological measurements. Unresolved measurements are left empty rather than inferred.
 
 The bulk workflow also reports processing status to help identify recordings requiring manual review.
