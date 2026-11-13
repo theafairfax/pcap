@@ -464,8 +464,10 @@ def compare_multiple_groups(rows, groups, significance_method='Holm-Bonferroni')
         comparisons = [_comparison_caption(r) for _, r in relevant.iterrows()]
         comparison_brackets(fig, relevant, list(groups), measurements,
                             significance_column=significance_column)
-        fig.update_layout(title=f"{measure}<br><sup>{' · '.join(subtitle)}</sup>",
-                          yaxis_title=measure, template='plotly_white',
+        display_title = DISPLAY_TITLES.get(measure, measure)
+        fig.update_layout(title=f"{display_title}<br><sup>{' · '.join(subtitle)}</sup>",
+                          yaxis_title=display_title, meta={'measure': measure},
+                          template='plotly_white',
                           height=390 + 22 * max(0, len(comparisons)-1),
                           margin=dict(l=20, r=20, t=75, b=100 + 19 * max(0, len(comparisons)-1)))
         fig.add_annotation(x=.5, y=-.22, xref='paper', yref='paper',
