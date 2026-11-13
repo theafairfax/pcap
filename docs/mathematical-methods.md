@@ -27,3 +27,11 @@ V_{half,AHP} = \frac{V_{onset,AHP}+V_{trough,AHP}}{2}.
 It does not require post-trough recovery. The concise AHP amplitude is a *positive depth*, computed as \(V_{threshold,AP}-V_{trough,AHP}\).
 
 These measures are sensitive to baseline choice, injection protocol, filters, sampling frequency, and noise; see [Limitations](limitations.md).
+
+## Resting voltage versus AP onset voltage
+
+Average pre-injection RMP is recording-wide: the mean voltage before current injection is calculated for each qualifying sweep, then those sweep means are averaged with equal weight:
+
+\\[\\overline{RMP} = \\frac{1}{N}\\sum_{s=1}^{N}\\bar V_{s,pre}.\\]
+
+AP onset Vm is the voltage sampled at dV/dt-defined onset, and **is not** resting potential. The eight voltage measures consist of raw RMP, onset, AP peak and AHP trough, onset-referenced differences (AP peak − onset; onset − AHP trough as positive depth), and signed RMP differences (AP peak − RMP; AHP trough − RMP). A negative RMP-referenced trough means hyperpolarization relative to resting voltage.
