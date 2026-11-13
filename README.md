@@ -64,11 +64,10 @@ the full sweep; set a manual window to exclude test pulses and rebound spikes.
 
 ## Display behavior
 
-- Both AP spike and AHP views show the same interval: **2 ms before AP onset
-  through 3 ms after AP half-fall**, limited to available captured samples. Each
-  trace uses its own AP landmarks. Display endpoints are interpolated between
-  samples. Measurements still use the full analysis/recovery capture. Markers
-  outside the visible window remain in the tables but are hidden on the plot.
+- The AP view shows **2 ms before AP onset through 3 ms after AP half-fall**.
+  The AHP view extends to the detected trough and rebound (when available),
+  limited to captured samples. Display endpoints are interpolated between samples;
+  markers outside the visible window remain in the tables.
 - Query: black waveform, solid colored marker lines.
 - Reference: gray waveform, faint dashed colored marker lines.
 - Plotly hover provides detailed values; scrolling the reference selector or
@@ -102,15 +101,17 @@ uses milliseconds and mV. All reference and upload events use the same extractor
   minimum. Depth is signed trough minus AP onset Vm, not trough/absolute AP peak.
 - AHP rise: downward 10–90% interval from onset toward trough; width: duration
   between downward/upward half-depth crossings. It is not exponential decay tau.
-- AHP trough identification stops **3 ms after the AP half-fall** (the interpolated
+- AHP trough identification stops **30 ms after the AP half-fall** (the interpolated
   falling 50% crossing between AP onset Vm and peak), or earlier at the next AP
-  onset, injection-window end, or configured capture limit. A trough at the search
-  boundary is unresolved; if AP half-fall is missing, AHP detection is unavailable.
-  Recovery measurements and waveform display retain the longer post-peak capture
-  (default 50 ms). Truncated recovery yields missing width. This early-trough
-  criterion emphasizes fast AHPs and excludes later troughs.
-- Version 1.0 local and Supabase references are remeasured from their stored
-  waveform samples when loaded, using the new criterion; no re-upload is required.
+  onset, injection-window end (unless post-injection analysis is allowed), or
+  configured capture limit. A trough at the search boundary is unresolved;
+  if AP half-fall is missing, AHP detection is unavailable. Recovery measurements
+  retain the longer post-peak capture (default 50 ms in the Visualizer).
+  The wider search accommodates slower AHPs but can include slow voltage drift;
+  check the selected trough against the raw recording.
+- Older local and Supabase references (versions 1.0, 1.1, and 1.3) are remeasured
+  from their stored waveform samples with the 30 ms trough criterion when loaded;
+  no re-upload is required if the original captured samples cover the trough.
   New references are saved as version 1.1.
 - No junction-potential correction, temperature correction, or automatic
   cross-laboratory harmonization is applied.
@@ -261,9 +262,10 @@ reference collections and uses its own analysis settings.
    ID, selected sweep (reader's zero-based index), AP count in that sweep, detection
    settings, injection window, status, and AP/AHP metrics and marker times in ms/mV.
    **AP Half width (ms)** and **AHP Half width (ms)** are half-fall minus half-rise,
-   equivalent to the visualizer's half-height width. The 3 ms after AP half-fall
-   trough cutoff also applies to bulk analysis. AHP recovery/half-width can extend
-   beyond this cutoff within the configured recovery capture.
+   equivalent to the visualizer's half-height width. The default 30 ms after
+   AP half-fall trough cutoff also applies to bulk analysis (adjustable down to
+   1 ms). AHP recovery/half-width can extend beyond the cutoff within the
+   configured recovery capture.
 3. Failed/no-spike files retain an explanatory row; unresolved numbers are blank.
    Partial first events are retained rather than replaced by later APs or sweeps.
    Results cache only scalar rows; parsed recordings are released after each file.
