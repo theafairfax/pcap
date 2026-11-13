@@ -4,7 +4,8 @@ from dataclasses import asdict
 import streamlit as st
 from .core import Settings
 from .bulk import (analyze_file, results_frame, export_frame, import_kinetics_csv,
-                   compare_multiple_groups, pairwise_statistics, GROUP_COLORS, SIGNIFICANCE_METHODS)
+                   compare_multiple_groups, pairwise_statistics, GROUP_COLORS, SIGNIFICANCE_METHODS,
+                   VOLTAGE_MEASURE_ORDER)
 from .group_selection_component import group_selection_grid
 from .group_figure import combined_boxplots_png, combined_boxplots_pdf, standalone_waveform_png
 from .group_waveform import prototype_figure, significant_waveform_pairs
@@ -57,7 +58,7 @@ def render_bulk():
     settings = Settings(height=height,prominence=prominence,dvdt_threshold=dvdt,ahp_window_ms=recovery,
                         ahp_trough_window_ms=trough_window,ahp_post_injection=post_injection,
                         start_ms=start if manual else None,end_ms=end if manual else None)
-    st.caption('AHP trough search and recovery are independently configurable. AP and AHP half widths = half-fall − half-rise. Unresolved troughs or half-recovery crossings remain blank instead of being guessed. Review unusually late AHP troughs against the raw trace.')
+    st.caption('AHP trough search and recovery are independently configurable. AP and AHP half widths = half-fall − half-rise. Average RMP is the equal-weighted mean of each sweep’s pre-injection voltage average, with the detected injection start or manually specified injection start used to define its baseline. Unresolved measurements remain blank.')
     files = []
     for i, (upload, group) in enumerate(uploaded):
         digest = hashlib.sha256(upload.getvalue()).hexdigest()
@@ -91,7 +92,7 @@ def render_bulk():
     relative.download_button('Download relative kinetics CSV',
                              export_frame(rows,relative=True,include_groups=True).to_csv(index=False,na_rep='').encode('utf-8-sig'),
                              file_name='bulk_kinetics_relative.csv',mime='text/csv',key='bulk_relative_csv',width='stretch')
-    st.caption('Both exports include the original 16 kinetic columns plus absolute AP peak and AHP trough voltages (mV), and Group when assigned. Relative timestamps have AP peak = 0 ms; membrane voltages are unchanged. AHP Half-Fall is the descending midpoint crossing before the trough.')
+    st.caption('Exports include measured average pre-injection RMP across available sweeps, AP onset Vm, raw AP peak and AHP trough Vm, and signed peak/trough differences from RMP, plus RMP sweep count. The original AP-onset-relative amplitudes remain. Relative timestamps place AP peak at 0 ms; voltages are unchanged. RMP is blank if no reliable injection start can be identified.')
     return saved
 
 
@@ -243,7 +244,12 @@ def render_groups(batch):
         voltage_mode='absolute')
     ahp_chart, ahp_counts, ahp_tests = ahp_resolution_analysis(rows, active)
     time_plots = [fig for fig in figures if fig.layout.yaxis.title.text.endswith('(ms)')]
-    voltage_plots = [fig for fig in figures if fig.layout.yaxis.title.text.endswith('(mV)')]
+    voltage_by_metric = {
+        (fig.layout.meta or {}).get('measure', fig.layout.yaxis.title.text): fig
+        for fig in figures if fig.layout.yaxis.title.text.endswith('(mV)')
+    }
+    voltage_plots = [voltage_by_metric[key] for key in VOLTAGE_MEASURE_ORDER
+                     if key in voltage_by_metric]
 
     st.caption('Every waveform is a schematic interpolation through mean measured landmarks, '
                'not an average of raw traces. All timing landmarks are aligned to AP peak (t = 0 ms).')
@@ -335,12 +341,17 @@ def render_groups(batch):
         else:
             st.info('No ' + name.lower() + ' are available.')
         selected = summary.loc[summary['Measure'].isin(
-            [fig.layout.yaxis.title.text for fig in plots])]
+            [(fig.layout.meta or {}).get('measure', fig.layout.yaxis.title.text)
+             for fig in plots])]
         st.dataframe(selected, hide_index=True, width='stretch')
 
     with tabs[1]:
         render_measurements('Kinetics Measurements', time_plots, 'kinetics_measurements')
     with tabs[2]:
+        st.caption('First: raw average RMP and AP onset Vm; next: raw AP peak and AHP trough Vm; '
+                   'then: AP peak height and positive AHP trough depth relative to AP onset; '
+                   'finally: signed AP peak and AHP trough voltages relative to average RMP. '
+                   'Positive means above the chosen baseline; negative means below it.')
         render_measurements('Voltage Measurements', voltage_plots, 'voltage_measurements')
         st.subheader('AHP trough resolution')
         st.plotly_chart(ahp_chart, width='stretch', key='ahp_resolution_chart')
