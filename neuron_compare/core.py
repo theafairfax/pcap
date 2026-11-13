@@ -1,9 +1,9 @@
 """One first-AP/AHP pair per sweep, using a versioned measurement definition."""
 from dataclasses import dataclass, asdict
 import numpy as np
-from .measurements import analyze_events, detect_peaks
+from .measurements import analyze_events, detect_peaks, MAX_AHP_TROUGH_WINDOW_MS
 
-ANALYSIS_VERSION = 'first-event-1.3'
+ANALYSIS_VERSION = 'first-event-1.4'
 LEGACY_ANALYSIS_VERSION = 'first-event-1.0'
 MARKERS = ('Location', 'Onset', 'Rise 10%', 'Rise 90%', 'Half rise', 'Half fall', 'Rebound')
 
@@ -15,7 +15,7 @@ class Settings:
     separation_ms: float = 2.
     dvdt_threshold: float = 20.
     ahp_window_ms: float = 50.
-    ahp_trough_window_ms: float = 3.
+    ahp_trough_window_ms: float = MAX_AHP_TROUGH_WINDOW_MS
     ahp_post_injection: bool = False
     start_ms: float | None = None
     end_ms: float | None = None
