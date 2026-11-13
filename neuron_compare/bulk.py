@@ -4,7 +4,7 @@ import json
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from .core import ANALYSIS_VERSION, MARKERS, Settings, count_spikes, first_event, metrics
+from .core import ANALYSIS_VERSION, MARKERS, Settings, count_spikes, first_event, injection_window, metrics
 from .recordings import load_recording
 
 STANDARD_METRICS = ('Peak Vm (mV)', 'Amplitude from AP threshold (mV)',
@@ -18,7 +18,45 @@ MARKER_COLUMNS = ([f'AP {marker} (ms)' for marker in MARKERS if marker != 'Rebou
                   + [f'AHP {marker} (ms)' for marker in MARKERS])
 COLUMNS = (['File ID','Filename','Status','Detail','Sweep','APs in selected sweep','Analysis version',
             'Voltage channel rank','Analysis settings','Injection start (ms)','Injection end (ms)',
-            'Injection window source','Sampling Rate (Hz)','AP threshold Vm (mV)'] + KINETIC_COLUMNS + MARKER_COLUMNS)
+            'Injection window source','Sampling Rate (Hz)','Average RMP (mV)',
+            'RMP sweeps used','AP threshold Vm (mV)',
+            'AP peak relative to avg RMP (mV)', 'AHP trough relative to avg RMP (mV)']
+           + KINETIC_COLUMNS + MARKER_COLUMNS)
+
+
+def average_rmp(sweeps, settings=Settings()):
+    """Mean of per-sweep pre-injection mean voltages (mV), with equal sweep weight.
+
+    Locate each current-step onset using the same detector as AP analysis.
+    Apply the median detected onset to zero-current/silent sweeps.
+    A manual injection start takes precedence. With no reliable timing,
+    return missing rather than assume a resting baseline.
+    """
+    detected_starts = {}
+    for sweep in sweeps:
+        try:
+            start, _, source = injection_window(sweep, Settings())
+        except (ValueError, IndexError):
+            continue
+        if source == 'Current-derived injection window' and start > float(sweep.time[0]):
+            detected_starts[sweep.index] = start - float(sweep.time[0])
+    common_start = (settings.start_ms / 1000. if settings.start_ms is not None
+                    else float(np.median(list(detected_starts.values())))
+                    if detected_starts else np.nan)
+    baselines = []
+    for sweep in sweeps:
+        duration = (settings.start_ms / 1000. if settings.start_ms is not None
+                    else detected_starts.get(sweep.index, common_start))
+        if not np.isfinite(duration) or duration <= 0:
+            continue
+        first_injection_sample = int(np.searchsorted(
+            sweep.time, float(sweep.time[0]) + duration, side='left'))
+        if first_injection_sample < 2:
+            continue
+        baseline = np.asarray(sweep.voltage[:first_injection_sample], dtype=float)
+        if np.all(np.isfinite(baseline)):
+            baselines.append(float(np.mean(baseline)))
+    return (float(np.mean(baselines)) if baselines else np.nan, len(baselines))
 
 
 def analyze_file(data, filename, channel=0, settings=Settings()):
@@ -29,6 +67,8 @@ def analyze_file(data, filename, channel=0, settings=Settings()):
         'Analysis settings': json.dumps(asdict(settings), sort_keys=True)})
     try:
         sweeps = load_recording(data, filename, channel)
+        rmp, rmp_n = average_rmp(sweeps, settings)
+        row['Average RMP (mV)'], row['RMP sweeps used'] = rmp, rmp_n
         selected = None
         for sweep in sweeps:
             count = count_spikes(sweep, settings)
@@ -45,7 +85,11 @@ def analyze_file(data, filename, channel=0, settings=Settings()):
                     'Injection start (ms)': meta['injection_start_ms'],
                     'Injection end (ms)': meta['injection_end_ms'],
                     'Injection window source': meta['window_source'],
-                    'AP threshold Vm (mV)': r['Threshold Vm (mV)']})
+                    'AP threshold Vm (mV)': r['Threshold Vm (mV)'],
+                    'AP peak relative to avg RMP (mV)':
+                        r['SPIKE Peak Membrane Voltage-1 (mV)'] - rmp,
+                    'AHP trough relative to avg RMP (mV)':
+                        r['AHP trough Vm (mV)'] - rmp})
         for block, label in (('SPIKE','AP'), ('AHP','AHP')):
             for name, value in metrics(event, block).items():
                 if name.startswith('AHP ') and name in KINETIC_COLUMNS:
@@ -71,9 +115,14 @@ def results_frame(rows):
     return pd.DataFrame(rows, columns=COLUMNS)
 
 
-# Publication-oriented export schema. Keep the original 16 fields in order,
-# then append raw absolute membrane voltages for the AP peak and AHP trough.
-VOLTAGE_EXPORT_COLUMNS = ['AP peak Vm (mV)', 'AHP trough Vm (mV)']
+# Publication-oriented export schema: preserve existing fields and append
+# directly measured voltage baselines and RMP-referenced differences.
+VOLTAGE_EXPORT_COLUMNS = [
+    'Average RMP (mV)', 'AP onset Vm (mV)', 'AP peak Vm (mV)',
+    'AHP trough Vm (mV)', 'AP peak relative to avg RMP (mV)',
+    'AHP trough relative to avg RMP (mV)',
+]
+RMP_METADATA_COLUMNS = ['RMP sweeps used']
 LEGACY_EXPORT_COLUMNS = [
     'Filename', 'Sampling Rate (Hz)', 'Sweep', 'AP Location (ms)',
     'AP Onset (ms)', 'AP Rise 10% (ms)', 'AP Rise 90% (ms)',
@@ -81,17 +130,29 @@ LEGACY_EXPORT_COLUMNS = [
     'AP Half width (ms)', 'AHP Location (ms)', 'AHP Onset (ms)',
     'AHP Half-Fall (ms)', 'AP amplitude (mV)', 'AHP amplitude (mV)',
 ]
-EXPORT_COLUMNS = LEGACY_EXPORT_COLUMNS + VOLTAGE_EXPORT_COLUMNS
+EXPORT_COLUMNS = LEGACY_EXPORT_COLUMNS + VOLTAGE_EXPORT_COLUMNS + RMP_METADATA_COLUMNS
 # Only coordinate timestamps are shifted; elapsed durations and voltages are not.
 EXPORT_TIMES = [
     'AP Location (ms)', 'AP Onset (ms)', 'AP Rise 10% (ms)',
     'AP Rise 90% (ms)', 'AP Half rise (ms)', 'AP Half fall (ms)',
     'AHP Location (ms)', 'AHP Onset (ms)', 'AHP Half-Fall (ms)',
 ]
-# Group comparisons use AP-peak-relative landmark times and unchanged duration/amplitude.
+# Group comparisons use AP-peak-relative timestamps and raw/offset voltages.
+# RMP sweep count is metadata, not a statistical hypothesis.
 COMPARISON_COLUMNS = [
-    c for c in EXPORT_COLUMNS if c not in ('Filename', 'Sampling Rate (Hz)', 'Sweep', 'AP Location (ms)')
+    c for c in EXPORT_COLUMNS if c not in ('Filename', 'Sampling Rate (Hz)',
+                                         'Sweep', 'AP Location (ms)', 'RMP sweeps used')
 ]
+VOLTAGE_MEASURE_ORDER = (
+    'Average RMP (mV)', 'AP onset Vm (mV)',
+    'AP peak Vm (mV)', 'AHP trough Vm (mV)',
+    'AP amplitude (mV)', 'AHP amplitude (mV)',
+    'AP peak relative to avg RMP (mV)', 'AHP trough relative to avg RMP (mV)',
+)
+DISPLAY_TITLES = {
+    'AP amplitude (mV)': 'AP peak above AP onset (mV)',
+    'AHP amplitude (mV)': 'AHP trough depth below AP onset (mV)',
+}
 GROUP_COLORS = ('#475569', '#dc645b', '#16a085', '#8266b0', '#d09431',
                 '#337db8', '#b76591', '#7c8a4b')
 
@@ -114,8 +175,13 @@ def export_frame(rows, relative=False, include_groups=False):
         # Descending midpoint between onset/threshold and trough; this does
         # not require AHP recovery. The legacy internal name is Half rise.
         'AHP Half-Fall (ms)': 'AHP Half rise (ms)',
+        'Average RMP (mV)': 'Average RMP (mV)',
+        'AP onset Vm (mV)': 'AP threshold Vm (mV)',
         'AP peak Vm (mV)': 'AP Peak Vm (mV)',
         'AHP trough Vm (mV)': 'AHP Trough Vm (mV)',
+        'AP peak relative to avg RMP (mV)': 'AP peak relative to avg RMP (mV)',
+        'AHP trough relative to avg RMP (mV)': 'AHP trough relative to avg RMP (mV)',
+        'RMP sweeps used': 'RMP sweeps used',
         'AP amplitude (mV)': 'AP Amplitude from AP threshold (mV)',
         # Report positive hyperpolarization depth (threshold - trough).
         'AHP amplitude (mV)': 'AHP Amplitude from AP threshold (mV)',
@@ -139,7 +205,7 @@ def export_frame(rows, relative=False, include_groups=False):
 
 
 def import_kinetics_csv(data, filename='previous_export.csv', timing='Auto'):
-    """Parse legacy 16-column and new 18-column PCAP kinetics exports.
+    """Parse prior PCAP exports and the expanded RMP/onset schema.
 
     Imports never re-run electrophysiology extraction. Absolute timestamps
     are converted to AP-peak-relative only when producing comparisons.
@@ -200,6 +266,11 @@ def import_kinetics_csv(data, filename='previous_export.csv', timing='Auto'):
         'AP amplitude (mV)': 'AP Amplitude from AP threshold (mV)',
         'AP peak Vm (mV)': 'AP Peak Vm (mV)',
         'AHP trough Vm (mV)': 'AHP Trough Vm (mV)',
+        'Average RMP (mV)': 'Average RMP (mV)',
+        'AP onset Vm (mV)': 'AP threshold Vm (mV)',
+        'AP peak relative to avg RMP (mV)': 'AP peak relative to avg RMP (mV)',
+        'AHP trough relative to avg RMP (mV)': 'AHP trough relative to avg RMP (mV)',
+        'RMP sweeps used': 'RMP sweeps used',
     }
     for position in range(len(source)):
         row = dict.fromkeys(COLUMNS, np.nan)
